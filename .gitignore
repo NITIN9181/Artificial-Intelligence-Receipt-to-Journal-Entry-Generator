@@ -1,0 +1,27 @@
+# Added by code-review-graph
+.code-review-graph/
+
+# IDE and AI Assistant Rules
+.cursorrules
+.windsurfrules
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+
+# Tool Configurations
+.mcp.json
+.opencode.json
+
+# Tool Data and Caches
+.claude/
+.cursor/
+.kiro/
+
+# Environment
+.venv/
+
+# Documentation
+PRD_AI_Receipt_Journal_Entry_Generator_v2.md.pdf
+PRD_AI_Receipt_Journal_Entry_Generator_v2.md
+antigravity_prompt.md
+phases/
