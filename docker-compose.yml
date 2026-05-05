@@ -1,0 +1,73 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: receipt_journal
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: changeme
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U admin -d receipt_journal" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+
+  fastapi:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+asyncpg://admin:changeme@postgres:5432/receipt_journal
+      SUPABASE_URL: https://chazqctmrgyaewmlpgjv.supabase.co
+      SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNoYXpxY3Rtcmd5YWV3bWxwZ2p2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5MDA1NTIsImV4cCI6MjA5MzQ3NjU1Mn0.bKnyt7jGpC1dQPxp_ufZM47Q3vvOpXaOatqxXhVmwBA
+      SUPABASE_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNoYXpxY3Rtcmd5YWV3bWxwZ2p2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzkwMDU1MiwiZXhwIjoyMDkzNDc2NTUyfQ.SUVihJsnrUf9FWBKTyBGXGdyL0v1HtNKu-y8IIMkeLI
+      STORAGE_ENDPOINT: http://minio:9000
+      STORAGE_ACCESS_KEY: minioadmin
+      STORAGE_SECRET_KEY: minioadmin
+      # OLLAMA_HOST: http://host.docker.internal:11434
+      # OLLAMA_MODEL: qwen2.5-vl:7b
+      NVIDIA_NIM_API_KEY: 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
+      NVIDIA_NIM_MODEL: meta/llama-4-maverick-17b-128e-instruct
+      NVIDIA_NIM_URL: https://nim.nvidia.com/v1
+      CORS_ORIGINS: http://localhost:3000
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    environment:
+      NEXT_PUBLIC_SUPABASE_URL: https://chazqctmrgyaewmlpgjv.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNoYXpxY3Rtcmd5YWV3bWxwZ2p2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5MDA1NTIsImV4cCI6MjA5MzQ3NjU1Mn0.bKnyt7jGpC1dQPxp_ufZM47Q3vvOpXaOatqxXhVmwBA
+      NEXT_PUBLIC_API_URL: http://localhost:8000/api/v1
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    ports:
+      - "3000:3000"
+    depends_on:
+      - fastapi
+
+volumes:
+  postgres_data:
+  minio_data:
