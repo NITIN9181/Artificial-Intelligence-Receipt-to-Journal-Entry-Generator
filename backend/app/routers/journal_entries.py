@@ -126,6 +126,48 @@ async def list_journal_entries(
     )
 
 
+@router.get("/export/csv", status_code=200)
+async def export_journal_entries_csv(
+    date_from: Optional[date_type] = None,
+    date_to: Optional[date_type] = None,
+    vendor: Optional[str] = None,
+    category: Optional[str] = None,
+    entry_status: Optional[str] = Query(default=None, alias="status"),
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """GET /api/v1/journal-entries/export/csv — Stream CSV export."""
+    from app.services.export_csv import generate_csv_stream
+    filters = {
+        "date_from": date_from,
+        "date_to": date_to,
+        "vendor": vendor,
+        "status": EntryStatus(entry_status) if entry_status else None
+    }
+    return await generate_csv_stream(filters, db, user_id)
+
+
+@router.get("/export/pdf", status_code=200)
+async def export_journal_entries_pdf(
+    date_from: Optional[date_type] = None,
+    date_to: Optional[date_type] = None,
+    vendor: Optional[str] = None,
+    category: Optional[str] = None,
+    entry_status: Optional[str] = Query(default=None, alias="status"),
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """GET /api/v1/journal-entries/export/pdf — Stream PDF export."""
+    from app.services.export_pdf import generate_pdf_stream
+    filters = {
+        "date_from": date_from,
+        "date_to": date_to,
+        "vendor": vendor,
+        "status": EntryStatus(entry_status) if entry_status else None
+    }
+    return await generate_pdf_stream(filters, db, user_id)
+
+
 @router.get("/{entry_id}", response_model=JournalEntryResponse)
 async def get_journal_entry(
     entry_id: UUID,

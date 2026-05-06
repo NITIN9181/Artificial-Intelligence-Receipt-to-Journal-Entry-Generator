@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import settings
-from app.routers import health, journal_entries, receipts
+from app.routers import health, journal_entries, receipts, admin
 
 # Configure logging — NEVER log secrets
 logging.basicConfig(
@@ -21,15 +21,30 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from app.services.usage_monitor import run_usage_check
+from app.database import async_session_maker
+from app.auth import supabase_client
+
+scheduler = AsyncIOScheduler()
+
+async def scheduled_usage_check():
+    async with async_session_maker() as db:
+        await run_usage_check(db, supabase_client)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application startup and shutdown events."""
     logger.info(f"Starting AI Receipt Journal Entry Generator")
     logger.info(f"LLM Provider: {settings.llm_provider}")
     logger.info(f"Database configured: {'yes' if settings.database_url else 'no'}")
-    # NEVER log API keys or service role keys
+    
+    scheduler.add_job(scheduled_usage_check, 'cron', hour=2, minute=0)
+    scheduler.start()
+    
     yield
     logger.info("Shutting down...")
+    scheduler.shutdown()
 
 
 app = FastAPI(
@@ -52,6 +67,7 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(receipts.router)
 app.include_router(journal_entries.router)
+app.include_router(admin.router)
 
 
 # --- Global Error Handler (Task B7) ---

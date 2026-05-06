@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     supabase_url: str
     supabase_anon_key: str
     supabase_service_role_key: str  # NEVER expose
+    supabase_jwt_secret: str  # JWT secret for local verification (typically same as service_role_key or from Supabase dashboard)
 
     # --- Database ---
     database_url: str  # postgresql+asyncpg://...

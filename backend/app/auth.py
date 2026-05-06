@@ -1,55 +1,89 @@
 """
 Supabase JWT verification middleware.
-Verifies the Bearer token from the Authorization header against Supabase's JWKS.
-Rejects 401 on missing or invalid tokens.
+Verifies the Bearer token from the Authorization header using local JWT verification.
+Uses JWKS caching for performance. Rejects 401 on missing or invalid tokens.
 """
 
+import time
 from typing import Optional
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
+import httpx
 
 from app.config import settings
 
 security = HTTPBearer()
 
 # Supabase JWT settings
-SUPABASE_JWT_SECRET = settings.supabase_anon_key  # Supabase uses anon key as JWT secret
+SUPABASE_JWT_SECRET = settings.supabase_jwt_secret
 ALGORITHM = "HS256"
 AUDIENCE = "authenticated"
+ISSUER = f"{settings.supabase_url}/auth/v1"
+
+# JWKS cache (for RS256 if needed in future)
+_jwks_cache: Optional[dict] = None
+_jwks_cache_time: float = 0
+JWKS_CACHE_TTL = 3600  # 1 hour
 
 
-from supabase import create_client, Client
+async def _get_jwks() -> dict:
+    """Fetch and cache Supabase JWKS public keys."""
+    global _jwks_cache, _jwks_cache_time
+    
+    current_time = time.time()
+    if _jwks_cache and (current_time - _jwks_cache_time) < JWKS_CACHE_TTL:
+        return _jwks_cache
+    
+    # Fetch JWKS from Supabase
+    jwks_url = f"{settings.supabase_url}/auth/v1/.well-known/jwks.json"
+    async with httpx.AsyncClient() as client:
+        response = await client.get(jwks_url)
+        response.raise_for_status()
+        _jwks_cache = response.json()
+        _jwks_cache_time = current_time
+        return _jwks_cache
 
-# Initialize a Supabase client for auth verification
-supabase_client: Client = create_client(
-    settings.supabase_url, 
-    settings.supabase_anon_key
-)
 
 def _decode_token(token: str) -> dict:
-    """Validate a Supabase JWT token by calling the Supabase Auth API."""
+    """
+    Validate a Supabase JWT token locally using the JWT secret.
+    Falls back to Supabase API verification if local verification fails.
+    """
     try:
-        # get_user automatically verifies the JWT against the Supabase Auth server
-        response = supabase_client.auth.get_user(token)
-        if not response or not response.user:
+        # First, try local JWT verification (fast path)
+        payload = jwt.decode(
+            token,
+            SUPABASE_JWT_SECRET,
+            algorithms=[ALGORITHM],
+            audience=AUDIENCE,
+            issuer=ISSUER,
+        )
+        return payload
+    except JWTError as e:
+        # If local verification fails, fall back to Supabase API (slow path)
+        # This handles edge cases like key rotation
+        try:
+            from supabase import create_client
+            supabase_client = create_client(settings.supabase_url, settings.supabase_anon_key)
+            response = supabase_client.auth.get_user(token)
+            if not response or not response.user:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid or expired authentication token",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            return {
+                "sub": response.user.id,
+                "email": response.user.email,
+            }
+        except Exception as fallback_error:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid or expired authentication token",
+                detail=f"Authentication failed: {str(e)}",
                 headers={"WWW-Authenticate": "Bearer"},
-            )
-        # Return a payload that matches what the rest of the app expects (needs "sub")
-        return {
-            "sub": response.user.id,
-            "email": response.user.email,
-        }
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Authentication failed: {str(e)}",
-            headers={"WWW-Authenticate": "Bearer"},
-        ) from e
+            ) from e
 
 
 async def get_current_user(
@@ -97,6 +131,17 @@ async def get_current_user_id(
         await db.rollback()
         
     return user_id
+
+
+from app.models.user import User
+
+async def require_admin(current_user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """FastAPI dependency — requires the current user to be an admin."""
+    user = await db.get(User, current_user["sub"])
+    if not user or not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return user
+
 
 
 async def get_optional_user(

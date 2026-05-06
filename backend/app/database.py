@@ -21,6 +21,9 @@ async_session = async_sessionmaker(
     expire_on_commit=False,
 )
 
+# Alias for background tasks / bulk processor imports
+async_session_maker = async_session
+
 
 class Base(DeclarativeBase):
     pass

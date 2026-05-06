@@ -1,5 +1,22 @@
 version: "3.9"
 
+# ──────────────────────────────────────────────────────────────────────────────
+# LOCAL DEVELOPMENT ENVIRONMENT
+# ──────────────────────────────────────────────────────────────────────────────
+# IMPORTANT: This Docker Compose setup uses MinIO for local storage instead of
+# Supabase Storage to avoid requiring cloud connectivity during development.
+#
+# ENVIRONMENT PARITY NOTE:
+# - Production: Uses Supabase Storage (cloud-based S3-compatible storage)
+# - Local: Uses MinIO (self-hosted S3-compatible storage in Docker)
+#
+# The backend code (backend/app/services/storage.py) abstracts this difference
+# and automatically detects which storage backend to use based on environment
+# variables. Both provide the same S3-compatible API interface.
+#
+# To switch to Supabase Storage locally, set SUPABASE_STORAGE_BUCKET env var.
+# ──────────────────────────────────────────────────────────────────────────────
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -18,6 +35,9 @@ services:
       retries: 5
 
   minio:
+    # MinIO: S3-compatible object storage for local development
+    # In production, replace with SUPABASE_STORAGE_BUCKET environment variable
+    # to use Supabase Storage instead
     image: minio/minio
     command: server /data --console-address ":9001"
     environment:
@@ -26,8 +46,8 @@ services:
     volumes:
       - minio_data:/data
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # Web Console (http://localhost:9001)
 
   fastapi:
     build: ./backend

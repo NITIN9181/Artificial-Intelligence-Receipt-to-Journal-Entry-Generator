@@ -1,5 +1,11 @@
+import sys
+import os
 import asyncio
 from logging.config import fileConfig
+
+# Add backend directory to path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
@@ -65,8 +71,13 @@ async def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
+    configuration = config.get_section(config.config_ini_section, {})
+    if not configuration.get("sqlalchemy.url"):
+        from app.config import settings
+        configuration["sqlalchemy.url"] = settings.database_url
+        
     connectable = async_engine_from_config(
-        config.get_section(config.config_ini_section, {}),
+        configuration,
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )

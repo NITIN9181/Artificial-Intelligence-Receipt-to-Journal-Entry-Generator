@@ -118,7 +118,7 @@ class ReceiptExtraction(BaseModel):
     @field_validator("date")
     @classmethod
     def validate_date_sanity(cls, v: Optional[dt.date]) -> Optional[dt.date]:
-        """date_sanity: not future, not > 10 years ago."""
+        """date_sanity: not future, not > 10 years ago (PRD §FR-3)."""
         if v is None:
             return v
         today = dt.date.today()
@@ -126,10 +126,10 @@ class ReceiptExtraction(BaseModel):
             raise ValueError(
                 f"Receipt date {v} is in the future. Dates cannot be after today ({today})."
             )
-        ten_years_ago = today - timedelta(days=365 * 25)
+        ten_years_ago = today - timedelta(days=365 * 10)
         if v < ten_years_ago:
             raise ValueError(
-                f"Receipt date {v} is more than 25 years ago. "
+                f"Receipt date {v} is more than 10 years ago. "
                 f"Dates must be after {ten_years_ago}."
             )
         return v

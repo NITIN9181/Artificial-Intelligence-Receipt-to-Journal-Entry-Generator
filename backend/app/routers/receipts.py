@@ -110,6 +110,184 @@ async def upload_receipt(
     )
 
 
+@router.post("/bulk-upload", status_code=202)
+async def bulk_upload_receipts(
+    files: list[UploadFile] = File(...),
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """POST /api/v1/receipts/bulk-upload — Upload up to 20 receipt images/PDFs."""
+    if len(files) > 20:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Maximum of 20 files allowed per bulk upload.",
+        )
+
+    # Validate file sizes and types first
+    file_data_list = []
+    for file in files:
+        if file.content_type not in ALLOWED_MIME_TYPES:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid file type for {file.filename}: {file.content_type}.",
+            )
+        file_bytes = await file.read()
+        if len(file_bytes) > MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=f"File {file.filename} exceeds {settings.max_upload_size_mb} MB limit.",
+            )
+        file_data_list.append((file, file_bytes))
+
+    # Check daily limit
+    today_start = datetime.combine(date.today(), datetime.min.time())
+    count_query = select(func.count()).where(
+        Receipt.user_id == user_id,
+        Receipt.created_at >= today_start,
+    )
+    result = await db.execute(count_query)
+    today_count = result.scalar() or 0
+
+    if today_count + len(files) > settings.max_receipts_per_day:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Daily receipt limit reached. You can only upload {settings.max_receipts_per_day - today_count} more today.",
+        )
+
+    batch_id = uuid4()
+    
+    # Upload to Supabase Storage in parallel
+    import asyncio
+    upload_tasks = []
+    receipt_ids = []
+    
+    for file, file_bytes in file_data_list:
+        receipt_id = uuid4()
+        receipt_ids.append(receipt_id)
+        filename = f"{receipt_id}_{file.filename}"
+        upload_tasks.append(
+            upload_receipt_image(
+                file_bytes=file_bytes,
+                filename=filename,
+                user_id=UUID(user_id),
+                content_type=file.content_type,
+            )
+        )
+        
+    storage_paths = await asyncio.gather(*upload_tasks)
+    
+    # Create receipt records
+    receipt_responses = []
+    for (file, file_bytes), receipt_id, storage_path in zip(file_data_list, receipt_ids, storage_paths):
+        receipt = Receipt(
+            id=receipt_id,
+            user_id=UUID(user_id),
+            image_url=storage_path,
+            original_filename=file.filename,
+            mime_type=file.content_type,
+            file_size_bytes=len(file_bytes),
+            status=ReceiptStatus.UPLOADED,
+            batch_id=batch_id,
+        )
+        db.add(receipt)
+        receipt_responses.append({
+            "id": str(receipt_id),
+            "filename": file.filename,
+            "status": "UPLOADED"
+        })
+        
+    await db.flush()
+    await db.commit()
+
+    return {
+        "batch_id": str(batch_id),
+        "receipts": receipt_responses,
+        "total": len(files),
+        "message": f"{len(files)} receipts uploaded. Trigger extraction on each receipt individually or use /bulk-extract."
+    }
+
+
+from pydantic import BaseModel
+
+class BulkExtractRequest(BaseModel):
+    batch_id: str
+
+@router.post("/bulk-extract", status_code=202)
+async def bulk_extract_receipts(
+    body: BulkExtractRequest,
+    background_tasks: BackgroundTasks,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """POST /api/v1/receipts/bulk-extract — Trigger sequential extraction for a batch."""
+    from app.services.bulk_processor import get_receipts_by_batch, process_batch_sequentially
+    
+    receipts = await get_receipts_by_batch(body.batch_id, db)
+    if not receipts:
+        raise HTTPException(status_code=404, detail="Batch not found or empty")
+        
+    # Verify ownership
+    if str(receipts[0].user_id) != user_id:
+        raise HTTPException(status_code=404, detail="Batch not found")
+
+    # The background task will need its own DB session or we need to ensure the session stays open
+    # Instead, background tasks running SQLAlchemy need a new session context. 
+    # For now, we will pass the batch_id and create a new session inside the task if needed,
+    # but process_batch_sequentially can just use the provided session if we manage it carefully.
+    # Actually, background_tasks in FastAPI close the injected session. We must instantiate a new one.
+    from app.database import async_session_maker
+    
+    async def process_with_session(b_id: str):
+        async with async_session_maker() as session:
+            await process_batch_sequentially(b_id, session)
+            
+    background_tasks.add_task(process_with_session, body.batch_id)
+    return {"message": "Bulk extraction started"}
+
+
+@router.get("/batch/{batch_id}", status_code=200)
+async def get_batch_status(
+    batch_id: str,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """GET /api/v1/receipts/batch/{batch_id} — Get aggregated batch status."""
+    from app.services.bulk_processor import get_receipts_by_batch
+    receipts = await get_receipts_by_batch(batch_id, db)
+    if not receipts:
+        raise HTTPException(status_code=404, detail="Batch not found")
+        
+    if str(receipts[0].user_id) != user_id:
+        raise HTTPException(status_code=404, detail="Batch not found")
+
+    status_counts = {
+        "UPLOADED": 0,
+        "EXTRACTING": 0,
+        "EXTRACTED": 0,
+        "EXTRACTION_FAILED": 0,
+        "POSTED": 0,
+        "VALIDATION_FAILED": 0,
+        "REVIEWED": 0,
+        "REJECTED": 0,
+    }
+    
+    for r in receipts:
+        status_val = r.status.value if isinstance(r.status, ReceiptStatus) else r.status
+        if status_val in status_counts:
+            status_counts[status_val] += 1
+            
+    return {
+        "batch_id": batch_id,
+        "total": len(receipts),
+        "uploaded": status_counts["UPLOADED"],
+        "extracting": status_counts["EXTRACTING"],
+        "extracted": status_counts["EXTRACTED"] + status_counts["VALIDATION_FAILED"] + status_counts["REVIEWED"],
+        "failed": status_counts["EXTRACTION_FAILED"],
+        "posted": status_counts["POSTED"]
+    }
+
+
+
 @router.get("", status_code=200)
 async def list_receipts(
     user_id: str = Depends(get_current_user_id),
@@ -345,10 +523,45 @@ async def journalize_receipt(
         }
 
     except BookkeepingAssertionError as e:
-        # QUARANTINE — never post unbalanced entries
-        from app.models.journal import EntryStatus
+        # QUARANTINE — never post unbalanced entries (PRD §FR-4, §FR-5)
         logger.error(f"Bookkeeping assertion failure for receipt {receipt_id}: {e}")
+        
+        # Set receipt status to QUARANTINED
+        old_status = receipt.status.value if isinstance(receipt.status, ReceiptStatus) else receipt.status
+        receipt.status = ReceiptStatus.QUARANTINED
+        
+        # Write to audit_logs table
+        from sqlalchemy import text
+        audit_query = text("""
+            INSERT INTO audit_logs (table_name, record_id, action, old_values, new_values, performed_by)
+            VALUES ('receipts', :record_id, 'UPDATE', :old_values, :new_values, :performed_by)
+        """)
+        
+        await db.execute(
+            audit_query,
+            {
+                "record_id": str(receipt_id),
+                "old_values": {"status": old_status},
+                "new_values": {
+                    "status": "QUARANTINED",
+                    "error": f"Bookkeeping assertion failed: debits ({e.total_debit}) != credits ({e.total_credit})",
+                    "details": e.details
+                },
+                "performed_by": user_id,
+            }
+        )
+        
+        await db.commit()
+        
+        # Return HTTP 422 with detailed error
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Journal entry balance assertion failed: {str(e)}",
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "error": "Bookkeeping assertion failed",
+                "message": "This receipt has been quarantined and will not enter the ledger. Contact an administrator.",
+                "receipt_id": str(receipt_id),
+                "status": "QUARANTINED",
+                "total_debit": str(e.total_debit),
+                "total_credit": str(e.total_credit),
+            },
         )

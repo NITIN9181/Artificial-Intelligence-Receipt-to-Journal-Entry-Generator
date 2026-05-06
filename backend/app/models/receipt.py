@@ -31,6 +31,7 @@ class ReceiptStatus(str, enum.Enum):
     REVIEWED = "REVIEWED"
     POSTED = "POSTED"
     REJECTED = "REJECTED"
+    QUARANTINED = "QUARANTINED"  # Unbalanced entries that failed bookkeeping assertion
 
 
 # Valid state transitions per PRD §FR-5
@@ -49,9 +50,11 @@ VALID_TRANSITIONS: dict[ReceiptStatus, set[ReceiptStatus]] = {
     ReceiptStatus.REVIEWED: {
         ReceiptStatus.POSTED,
         ReceiptStatus.REJECTED,
+        ReceiptStatus.QUARANTINED,  # Can transition to QUARANTINED if bookkeeping fails
     },
     ReceiptStatus.POSTED: set(),       # terminal — immutable
     ReceiptStatus.REJECTED: set(),     # terminal
+    ReceiptStatus.QUARANTINED: set(),  # terminal — requires admin intervention
 }
 
 
@@ -82,6 +85,7 @@ class Receipt(Base):
     extraction_error = Column(Text)
     extracted_at = Column(DateTime(timezone=True))
     reviewed_at = Column(DateTime(timezone=True))
+    batch_id = Column(UUID(as_uuid=True), nullable=True, index=True)
     created_at = Column(
         DateTime(timezone=True), nullable=False, server_default=text("NOW()")
     )

@@ -1,0 +1,64 @@
+services:
+  # Backend API (FastAPI)
+  - type: web
+    name: receipt-journal-api
+    env: python
+    region: oregon
+    plan: free
+    branch: main
+    buildCommand: "cd backend && pip install -r requirements.txt"
+    startCommand: "cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.0
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: NVIDIA_NIM_API_KEY
+        sync: false
+      - key: LLM_MODEL
+        value: meta/llama-4-maverick-17b-128e-instruct
+      - key: OLLAMA_HOST
+        value: ""
+      - key: OLLAMA_MODEL
+        value: qwen2.5-vl:7b
+      - key: MAX_UPLOAD_SIZE_MB
+        value: 20
+      - key: MAX_RECEIPTS_PER_DAY
+        value: 20
+      - key: CORS_ORIGINS
+        value: https://your-app.vercel.app,http://localhost:3000
+    healthCheckPath: /api/v1/health
+    autoDeploy: true
+
+  # Frontend (Next.js) - Optional if deploying to Render instead of Vercel
+  # Uncomment if you want to deploy frontend to Render
+  # - type: web
+  #   name: receipt-journal-frontend
+  #   env: node
+  #   region: oregon
+  #   plan: free
+  #   branch: main
+  #   buildCommand: "cd frontend && npm install && npm run build"
+  #   startCommand: "cd frontend && npm start"
+  #   envVars:
+  #     - key: NODE_VERSION
+  #       value: 20.11.0
+  #     - key: NEXT_PUBLIC_API_URL
+  #       value: https://receipt-journal-api.onrender.com
+  #     - key: NEXT_PUBLIC_SUPABASE_URL
+  #       sync: false
+  #     - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+  #       sync: false
+  #   autoDeploy: true
+
+databases:
+  # Note: Using Supabase Postgres instead of Render database
+  # Database connection is via DATABASE_URL env var pointing to Supabase
