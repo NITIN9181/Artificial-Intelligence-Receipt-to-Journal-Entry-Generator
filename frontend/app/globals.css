@@ -1,0 +1,119 @@
+@import "tailwindcss";
+
+/* ═══════════════════════════════════════════════════════════════════
+   ATMOSPHERIC INTELLIGENCE — Design System Tokens
+   Source: Stitch MCP "Glassmorphic Receipt Uploader" project
+   ═══════════════════════════════════════════════════════════════════ */
+
+@theme {
+  /* ── Typography stacks ── */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-space-grotesk), ui-monospace, SFMono-Regular, monospace;
+
+  /* ── Semantic Color Aliases ── */
+  --color-background: #0b1326;
+  --color-foreground: #dae2fd;
+  --color-surface: #0b1326;
+  --color-surface-container: #171f33;
+  --color-surface-container-high: #222a3d;
+  --color-surface-container-highest: #2d3449;
+  --color-surface-container-low: #131b2e;
+  --color-surface-container-lowest: #060e20;
+  --color-primary: #c0c1ff;
+  --color-primary-container: #8083ff;
+  --color-secondary: #ddb7ff;
+  --color-secondary-container: #6f00be;
+  --color-tertiary: #89ceff;
+  --color-tertiary-container: #009ada;
+  --color-on-surface: #dae2fd;
+  --color-on-surface-variant: #c7c4d7;
+  --color-outline: #908fa0;
+  --color-outline-variant: #464554;
+  --color-error: #ffb4ab;
+  --color-error-container: #93000a;
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+}
+
+/* ── Z-Index 0: Base Layer ── */
+body {
+  background-color: #0b1326;
+  background-image: radial-gradient(circle at 15% 50%, rgba(99, 102, 241, 0.15) 0%, transparent 50%),
+                    radial-gradient(circle at 85% 30%, rgba(139, 92, 246, 0.10) 0%, transparent 50%);
+  background-attachment: fixed;
+  color: #dae2fd;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Z-Index 2: Standard Cards ── */
+.glass-panel {
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  background: rgba(255, 255, 255, 0.05);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
+
+/* ── Z-Index 3: Active / Modal ── */
+.glass-panel-active {
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid transparent;
+  background-image: linear-gradient(rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.08)),
+                    linear-gradient(135deg, rgba(192, 193, 255, 0.5), rgba(221, 183, 255, 0.5));
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
+}
+
+/* ── Ambient glow blobs ── */
+.ambient-glow {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(100px);
+  z-index: -1;
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+/* ── Status badge colors (from frontend.md) ── */
+.status-pending      { color: #94A3B8; }
+.status-extracting   { color: #818CF8; animation: pulse-glow 2s ease-in-out infinite; }
+.status-extracted    { color: #3B82F6; }
+.status-reviewed     { color: #14B8A6; }
+.status-posted       { color: #22C55E; }
+.status-rejected     { color: #EF4444; }
+.status-quarantined  { color: #F59E0B; }
+
+/* ── Confidence border indicators (from frontend.md F4) ── */
+.confidence-high    { border-left: 3px solid transparent; }
+.confidence-medium  { border-left: 3px solid #F59E0B; }
+.confidence-low     { border-left: 3px solid #F97316; }
+.confidence-very-low { border-left: 3px solid #EF4444; }
+
+/* ── Animations ── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in {
+  animation: fadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.5; }
+}
+
+@keyframes spin-slow {
+  to { transform: rotate(360deg); }
+}
+.animate-spin-slow {
+  animation: spin-slow 3s linear infinite;
+}
