@@ -81,6 +81,39 @@ export default function JournalEntriesPage() {
     }
   }
 
+  const handleExport = async (format: 'csv' | 'pdf') => {
+    try {
+      const { createClient } = await import('@/utils/supabase/client');
+      const supabase = createClient();
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+      const url = new URL(`${baseUrl}/journal-entries/export/${format}`);
+      if (vendorSearch) url.searchParams.append('vendor', vendorSearch);
+
+      const response = await fetch(url.toString(), {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (!response.ok) throw new Error('Export failed');
+
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = `journal_ledger.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(downloadUrl);
+      document.body.removeChild(a);
+      toast.success(`${format.toUpperCase()} exported successfully`);
+    } catch (err) {
+      console.error(err);
+      toast.error(`Failed to export ${format}`);
+    }
+  }
+
   return (
     <div className="flex-1 w-full max-w-[1400px] mx-auto p-4 md:p-6 lg:p-8 animate-fade-in pb-32">
       
@@ -92,10 +125,10 @@ export default function JournalEntriesPage() {
         </div>
         
         <div className="flex gap-3">
-          <button className="px-4 py-2 rounded-xl border border-white/10 hover:bg-white/5 transition-colors font-sans text-sm font-medium text-white flex items-center gap-2">
+          <button onClick={() => handleExport('csv')} className="px-4 py-2 rounded-xl border border-white/10 hover:bg-white/5 transition-colors font-sans text-sm font-medium text-white flex items-center gap-2">
             <FileDown size={16} /> Export CSV
           </button>
-          <button className="px-4 py-2 rounded-xl border border-white/10 hover:bg-white/5 transition-colors font-sans text-sm font-medium text-white flex items-center gap-2">
+          <button onClick={() => handleExport('pdf')} className="px-4 py-2 rounded-xl border border-white/10 hover:bg-white/5 transition-colors font-sans text-sm font-medium text-white flex items-center gap-2">
             <FileText size={16} /> Export PDF
           </button>
         </div>

@@ -4,53 +4,36 @@ import { useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useDropzone } from 'react-dropzone'
 import imageCompression from 'browser-image-compression'
-import { UploadCloud, CheckCircle, AlertCircle, Loader2, Camera, Receipt, Cpu } from 'lucide-react'
+import { UploadCloud, CheckCircle, AlertCircle, Loader2, Camera, Receipt, Cpu, X } from 'lucide-react'
 import { fetchApi } from '@/utils/apiClient'
 import { toast } from 'sonner'
+import BulkQueue from '@/components/BulkQueue'
 
 export default function UploadPage() {
   const router = useRouter()
-  const [status, setStatus] = useState<"IDLE" | "COMPRESSING" | "UPLOADING" | "ERROR">("IDLE")
+  const [status, setStatus] = useState<"IDLE" | "COMPRESSING" | "UPLOADING" | "ERROR" | "QUEUE">("IDLE")
   const [errorMsg, setErrorMsg] = useState("")
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
+  const [batchData, setBatchData] = useState<{ batchId: string, receipts: any[] } | null>(null)
 
-  const processFile = async (file: File) => {
-    if (file.size > 20 * 1024 * 1024) {
-      toast.error('File too large', { description: 'Maximum file size is 20MB.' })
-      setErrorMsg('File is too large. Maximum size is 20MB.')
-      setStatus('ERROR')
-      return
-    }
-
+  const processSingleFile = async (file: File) => {
+    // Fallback logic for exactly 1 file (Phase 1 legacy intact)
     try {
       setStatus('COMPRESSING')
       let fileToUpload = file
 
       if (file.type.startsWith('image/') && file.size > 5 * 1024 * 1024) {
         toast.info('Compressing large image...')
-        const options = {
-          maxSizeMB: 4.5,
-          maxWidthOrHeight: 2400,
-          useWebWorker: true,
-          fileType: 'image/jpeg',
-          initialQuality: 0.85
-        }
+        const options = { maxSizeMB: 4.5, maxWidthOrHeight: 2400, useWebWorker: true, fileType: 'image/jpeg', initialQuality: 0.85 }
         fileToUpload = await imageCompression(file, options)
       }
 
       setStatus('UPLOADING')
-      
       const formData = new FormData()
       formData.append('file', fileToUpload, file.name)
       
-      const response = await fetchApi('/receipts/upload', {
-        method: 'POST',
-        body: formData,
-      })
-
-      // Trigger the background LLM extraction
-      await fetchApi(`/receipts/${response.id}/extract`, {
-        method: 'POST'
-      })
+      const response = await fetchApi('/receipts/upload', { method: 'POST', body: formData })
+      await fetchApi(`/receipts/${response.id}/extract`, { method: 'POST' })
 
       toast.success('Receipt uploaded successfully!')
       router.push(`/review/${response.id}`)
@@ -63,9 +46,56 @@ export default function UploadPage() {
     }
   }
 
+  const handleUploadAll = async () => {
+    if (selectedFiles.length === 0) return;
+    if (selectedFiles.length === 1) {
+      return processSingleFile(selectedFiles[0]);
+    }
+
+    try {
+      setStatus('UPLOADING');
+      const formData = new FormData();
+      selectedFiles.forEach(file => {
+         // Optionally compress here as well if needed, but omitted for simplicity in bulk
+         formData.append('files', file, file.name);
+      });
+
+      const response = await fetchApi('/receipts/bulk-upload', {
+        method: 'POST',
+        body: formData
+      });
+
+      toast.success(`${response.total} receipts uploaded successfully!`);
+      setBatchData({ batchId: response.batch_id, receipts: response.receipts });
+      setStatus('QUEUE');
+
+    } catch (err: any) {
+      console.error('Bulk upload error:', err);
+      setErrorMsg(err.message || 'Bulk upload failed.');
+      setStatus('ERROR');
+      toast.error('Bulk upload failed', { description: err.message });
+    }
+  };
+
+  const removeFile = (index: number) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
   const onDrop = useCallback((acceptedFiles: File[]) => {
-    if (acceptedFiles.length > 0) {
-      processFile(acceptedFiles[0])
+    // Filter large files
+    const valid = acceptedFiles.filter(f => {
+       if (f.size > 20 * 1024 * 1024) {
+           toast.error(`File ${f.name} too large`, { description: 'Maximum file size is 20MB.' });
+           return false;
+       }
+       return true;
+    });
+
+    if (valid.length > 0) {
+      setSelectedFiles(prev => {
+         const combined = [...prev, ...valid];
+         return combined.slice(0, 20); // enforce max 20
+      });
     }
   }, [])
 
@@ -77,7 +107,7 @@ export default function UploadPage() {
       'image/heic': ['.heic'],
       'application/pdf': ['.pdf']
     },
-    maxFiles: 1,
+    maxFiles: 20,
     disabled: status === 'UPLOADING' || status === 'COMPRESSING'
   })
 
@@ -93,12 +123,16 @@ export default function UploadPage() {
           </div>
           <div className="mt-4 md:mt-0 glass-panel px-5 py-2.5 rounded-full flex items-center gap-3 border border-white/10 shadow-[0_4px_20px_rgba(0,0,0,0.3)]">
             <Receipt className="text-tertiary w-4 h-4" />
-            <span className="font-mono text-white text-sm font-medium">
-              0/20 <span className="text-white/50 text-xs ml-1 font-sans font-normal">receipts uploaded today</span>
+            <span className="font-mono text-white text-sm font-medium" data-testid="file-count">
+              {selectedFiles.length} of 20 <span className="text-white/50 text-xs ml-1 font-sans font-normal">files</span>
             </span>
           </div>
         </div>
 
+        {status === 'QUEUE' && batchData ? (
+          <BulkQueue batchId={batchData.batchId} initialReceipts={batchData.receipts} />
+        ) : (
+        <>
         {/* Central Drag and Drop Zone */}
         <div 
           {...getRootProps()}
@@ -106,22 +140,18 @@ export default function UploadPage() {
             ${isDragActive ? 'border-primary bg-primary/10 scale-[1.02] shadow-[0_0_50px_rgba(192,193,255,0.2)]' : 'border-primary/30 hover:border-primary/60'}`}
         >
           <input {...getInputProps()} capture="environment" />
-
-          {/* Inner glow effect on hover */}
           <div className="absolute inset-0 bg-gradient-to-b from-primary/0 to-primary/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
           
-          <div className="relative z-10 flex flex-col items-center text-center">
-            {status === 'IDLE' && (
+          <div className="relative z-10 flex flex-col items-center text-center w-full">
+            {status === 'IDLE' && selectedFiles.length === 0 && (
               <div className="flex flex-col items-center animate-fade-in pointer-events-none">
                 <div className="w-20 h-20 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mb-6 shadow-[0_0_30px_rgba(192,193,255,0.1)] group-hover:shadow-[0_0_50px_rgba(192,193,255,0.25)] transition-all duration-300 group-hover:scale-105">
                   <UploadCloud size={40} className="text-primary" />
                 </div>
                 <h3 className="font-heading text-2xl font-bold text-white mb-2">Drop files here</h3>
                 <p className="font-sans text-white/60 max-w-md mb-8 leading-relaxed text-sm">
-                  Supports PDF, JPG, PNG up to 20MB. AI will automatically extract merchant, date, and amount.
+                  Supports PDF, JPG, PNG up to 20MB. Upload up to 20 receipts at once.
                 </p>
-                
-                {/* Actions */}
                 <div className="flex flex-col sm:flex-row items-center gap-4 pointer-events-auto">
                   <button className="px-6 py-3 rounded-full bg-gradient-to-r from-primary to-secondary text-background font-heading text-sm font-bold tracking-wide shadow-[0_0_20px_rgba(192,193,255,0.3)] hover:shadow-[0_0_30px_rgba(192,193,255,0.5)] transition-all transform hover:scale-105 active:scale-95 flex items-center gap-2">
                     <Camera size={18} />
@@ -131,6 +161,36 @@ export default function UploadPage() {
                     Browse Files
                   </button>
                 </div>
+              </div>
+            )}
+
+            {status === 'IDLE' && selectedFiles.length > 0 && (
+              <div className="flex flex-col w-full max-w-2xl animate-fade-in pointer-events-auto" onClick={e => e.stopPropagation()}>
+                <div className="flex justify-between items-center mb-4 w-full">
+                    <h3 className="font-heading text-xl font-bold text-white">Selected Files</h3>
+                    <button 
+                      data-testid="upload-all"
+                      onClick={handleUploadAll}
+                      className="px-6 py-2.5 rounded-full bg-gradient-to-r from-primary to-secondary text-background font-heading text-sm font-bold tracking-wide shadow-[0_0_15px_rgba(192,193,255,0.2)] hover:shadow-[0_0_25px_rgba(192,193,255,0.4)] transition-all"
+                    >
+                      Upload All
+                    </button>
+                </div>
+                <div className="space-y-2 w-full max-h-[300px] overflow-y-auto pr-2">
+                  {selectedFiles.map((f, i) => (
+                    <div key={i} className="flex justify-between items-center glass-panel p-3 rounded-lg border border-white/10">
+                      <span className="text-white text-sm font-sans truncate pr-4">{f.name}</span>
+                      <button onClick={(e) => { e.stopPropagation(); removeFile(i); }} className="text-white/40 hover:text-error transition-colors p-1">
+                        <X size={16} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                {selectedFiles.length < 20 && (
+                  <p className="mt-4 text-white/50 text-sm font-sans">
+                    You can drop {20 - selectedFiles.length} more files here.
+                  </p>
+                )}
               </div>
             )}
 
@@ -202,7 +262,8 @@ export default function UploadPage() {
             </div>
           </div>
         </div>
-
+        </>
+        )}
       </div>
     </div>
   )

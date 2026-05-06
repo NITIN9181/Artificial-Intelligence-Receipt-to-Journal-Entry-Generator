@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { Receipt, Settings, UserCircle, LogOut, Home, FileText, HelpCircle, Bell } from "lucide-react";
+import { Receipt, Settings, UserCircle, LogOut, Home, FileText, HelpCircle, Bell, BarChart3 } from "lucide-react";
+import AdminBannerWrapper from "@/components/AdminBannerWrapper";
 import { createClient } from "@/utils/supabase/server";
 
 export default async function DashboardLayout({
@@ -31,9 +32,9 @@ export default async function DashboardLayout({
         </div>
 
         <div className="flex-1 px-4 space-y-2">
-          <Link href="/" className="flex items-center gap-4 px-4 py-3 rounded-lg text-white/40 hover:bg-white/5 hover:text-white transition-all duration-300 ease-in-out font-heading text-sm font-semibold tracking-wide">
-            <Home className="w-5 h-5" />
-            Home
+          <Link href="/dashboard" className="flex items-center gap-4 px-4 py-3 rounded-lg text-white/40 hover:bg-white/5 hover:text-white transition-all duration-300 ease-in-out font-heading text-sm font-semibold tracking-wide">
+            <BarChart3 className="w-5 h-5" />
+            Dashboard
           </Link>
           <Link href="/upload" className="flex items-center gap-4 px-4 py-3 rounded-lg bg-gradient-to-r from-primary-container/20 to-secondary-container/20 text-white border-r-2 border-secondary transition-all duration-300 ease-in-out font-heading text-sm font-semibold tracking-wide">
             <Receipt className="w-5 h-5" />
@@ -88,16 +89,21 @@ export default async function DashboardLayout({
         </Link>
       </header>
 
+      {/* Admin Banner (only visible to admins when threshold hit) */}
+      <div className="md:ml-64 md:pt-16 pt-16">
+        <AdminBannerWrapper />
+      </div>
+
       {/* Main Content Area */}
-      <main className="flex-1 w-full flex flex-col md:ml-64 md:pt-16 pt-16 relative z-10 pb-20 md:pb-0 min-h-screen">
+      <main className="flex-1 w-full flex flex-col md:ml-64 relative z-10 pb-20 md:pb-0 min-h-screen">
         {children}
       </main>
       
       {/* BottomNavBar (MOBILE) */}
       <nav className="md:hidden fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-6 pb-6 pt-3 bg-background/80 backdrop-blur-[30px] border-t border-white/10 rounded-t-[32px] shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
-        <Link href="/" className="flex flex-col items-center justify-center text-white/40 p-3 hover:text-primary active:scale-90 transition-transform">
-          <Home className="w-6 h-6 mb-1" />
-          <span className="font-heading text-[10px] font-bold">Home</span>
+        <Link href="/dashboard" className="flex flex-col items-center justify-center text-white/40 p-3 hover:text-primary active:scale-90 transition-transform">
+          <BarChart3 className="w-6 h-6 mb-1" />
+          <span className="font-heading text-[10px] font-bold">Stats</span>
         </Link>
         <Link href="/upload" className="flex flex-col items-center justify-center bg-gradient-to-r from-primary to-secondary text-background rounded-2xl p-4 shadow-[0_0_15px_rgba(192,193,255,0.4)] active:scale-90 transition-transform -mt-6 border border-white/20">
           <Receipt className="w-6 h-6" />
