@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Plus, Settings2, Trash2, Edit2, CheckCircle2, X } from 'lucide-react'
 import { toast } from 'sonner'
+import { ApiError } from '@/lib/api-client'
 
 type COAEntry = {
   id: string;
@@ -27,37 +28,57 @@ export default function SettingsPage() {
   const [newName, setNewName] = useState('')
   const [newType, setNewType] = useState<COAEntry['type']>('EXPENSE')
 
-  const handleSaveEdit = (id: string) => {
-    if (!editName.trim()) {
-      toast.error('Name cannot be empty')
-      return
+  const getErrorMessage = (error: unknown, fallback: string) => {
+    if (error instanceof ApiError) {
+      return ((error.body as { error?: string })?.error ?? error.message)
     }
-    setCoa(coa.map(entry => entry.id === id ? { ...entry, name: editName } : entry))
-    setEditingId(null)
-    toast.success('Account updated successfully')
+    if (error instanceof Error) return error.message
+    return fallback
+  }
+
+  const handleSaveEdit = (id: string) => {
+    try {
+      if (!editName.trim()) {
+        toast.error('Name cannot be empty')
+        return
+      }
+      setCoa(coa.map(entry => entry.id === id ? { ...entry, name: editName } : entry))
+      setEditingId(null)
+      toast.success('Account updated successfully')
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Failed to update account'))
+    }
   }
 
   const handleAdd = () => {
-    if (!newName.trim()) {
-      toast.error('Name cannot be empty')
-      return
+    try {
+      if (!newName.trim()) {
+        toast.error('Name cannot be empty')
+        return
+      }
+      const newEntry: COAEntry = {
+        id: Math.random().toString(),
+        name: newName,
+        type: newType,
+        isSystem: false
+      }
+      setCoa([...coa, newEntry])
+      setShowNew(false)
+      setNewName('')
+      setNewType('EXPENSE')
+      toast.success('Account added to ledger')
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Failed to add account'))
     }
-    const newEntry: COAEntry = {
-      id: Math.random().toString(),
-      name: newName,
-      type: newType,
-      isSystem: false
-    }
-    setCoa([...coa, newEntry])
-    setShowNew(false)
-    setNewName('')
-    setNewType('EXPENSE')
-    toast.success('Account added to ledger')
   }
 
   const handleDelete = (id: string) => {
-    setCoa(coa.filter(entry => entry.id !== id))
-    toast.success('Account deleted')
+    try {
+      setCoa(coa.filter(entry => entry.id !== id))
+      toast.success('Account deleted')
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Failed to delete account'))
+    }
   }
 
   const getTypeBadge = (type: string) => {
@@ -107,7 +128,7 @@ export default function SettingsPage() {
             <div className="w-48">
               <select 
                 value={newType} 
-                onChange={(e) => setNewType(e.target.value as any)}
+                onChange={(e) => setNewType(e.target.value as COAEntry['type'])}
                 className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-white font-sans text-sm focus:border-primary focus:outline-none transition-colors appearance-none"
               >
                 <option value="EXPENSE">Expense</option>

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Receipt, Settings, UserCircle, LogOut, Home, FileText, HelpCircle, Bell, BarChart3 } from "lucide-react";
-import AdminBannerWrapper from "@/components/AdminBannerWrapper";
+import AdminBanner from "@/components/admin-banner";
 import { createClient } from "@/utils/supabase/server";
 
 export default async function DashboardLayout({
@@ -91,7 +91,7 @@ export default async function DashboardLayout({
 
       {/* Admin Banner (only visible to admins when threshold hit) */}
       <div className="md:ml-64 md:pt-16 pt-16">
-        <AdminBannerWrapper />
+        <AdminBanner />
       </div>
 
       {/* Main Content Area */}

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useDropzone } from 'react-dropzone'
 import imageCompression from 'browser-image-compression'
 import { UploadCloud, CheckCircle, AlertCircle, Loader2, Camera, Receipt, Cpu, X } from 'lucide-react'
-import { fetchApi } from '@/utils/apiClient'
+import { apiClient, ApiError } from '@/lib/api-client'
 import { toast } from 'sonner'
 import BulkQueue from '@/components/BulkQueue'
 
@@ -14,7 +14,7 @@ export default function UploadPage() {
   const [status, setStatus] = useState<"IDLE" | "COMPRESSING" | "UPLOADING" | "ERROR" | "QUEUE">("IDLE")
   const [errorMsg, setErrorMsg] = useState("")
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
-  const [batchData, setBatchData] = useState<{ batchId: string, receipts: any[] } | null>(null)
+  const [batchData, setBatchData] = useState<{ batchId: string, receipts: unknown[] } | null>(null)
 
   const processSingleFile = async (file: File) => {
     // Fallback logic for exactly 1 file (Phase 1 legacy intact)
@@ -32,17 +32,20 @@ export default function UploadPage() {
       const formData = new FormData()
       formData.append('file', fileToUpload, file.name)
       
-      const response = await fetchApi('/receipts/upload', { method: 'POST', body: formData })
-      await fetchApi(`/receipts/${response.id}/extract`, { method: 'POST' })
+      const response = await apiClient('/receipts/upload', { method: 'POST', body: formData })
+      await apiClient(`/receipts/${response.id}/extract`, { method: 'POST' })
 
       toast.success('Receipt uploaded successfully!')
       router.push(`/review/${response.id}`)
 
-    } catch (err: any) {
-      console.error('Upload error:', err)
-      setErrorMsg(err.message || 'An unexpected error occurred during upload.')
+    } catch (err) {
+      const message =
+        err instanceof ApiError
+          ? ((err.body as { error?: string })?.error ?? err.message)
+          : 'An unexpected error occurred during upload.'
+      setErrorMsg(message)
       setStatus('ERROR')
-      toast.error('Upload failed', { description: err.message })
+      toast.error('Upload failed', { description: message })
     }
   }
 
@@ -60,7 +63,7 @@ export default function UploadPage() {
          formData.append('files', file, file.name);
       });
 
-      const response = await fetchApi('/receipts/bulk-upload', {
+      const response = await apiClient('/receipts/bulk-upload', {
         method: 'POST',
         body: formData
       });
@@ -69,11 +72,14 @@ export default function UploadPage() {
       setBatchData({ batchId: response.batch_id, receipts: response.receipts });
       setStatus('QUEUE');
 
-    } catch (err: any) {
-      console.error('Bulk upload error:', err);
-      setErrorMsg(err.message || 'Bulk upload failed.');
+    } catch (err) {
+      const message =
+        err instanceof ApiError
+          ? ((err.body as { error?: string })?.error ?? err.message)
+          : 'Bulk upload failed.'
+      setErrorMsg(message);
       setStatus('ERROR');
-      toast.error('Bulk upload failed', { description: err.message });
+      toast.error('Bulk upload failed', { description: message });
     }
   };
 

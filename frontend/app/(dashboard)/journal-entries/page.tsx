@@ -1,9 +1,9 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { fetchApi } from '@/utils/apiClient'
+import { apiClient, ApiError } from '@/lib/api-client'
 import { toast } from 'sonner'
-import { Search, Filter, Download, ChevronDown, ChevronRight, FileText, FileDown, Receipt as ReceiptIcon } from 'lucide-react'
+import { Search, Filter, ChevronDown, ChevronRight, FileText, FileDown, Receipt as ReceiptIcon } from 'lucide-react'
 
 type JournalEntry = {
   id: string;
@@ -13,7 +13,25 @@ type JournalEntry = {
   category: string;
   total_amount: number;
   status: string;
-  line_items: any[];
+  line_items: Array<{ description: string; quantity: number; unit_price: number; line_total: number }>;
+}
+
+type ReceiptApiItem = {
+  id: string
+  status: string
+  created_at: string
+  extracted_data?: {
+    date?: string
+    vendor_name?: string
+    expense_category?: string
+    total_amount?: number
+    line_items?: Array<{
+      description?: string
+      quantity?: number
+      unit_price?: number
+      line_total?: number
+    }>
+  }
 }
 
 export default function JournalEntriesPage() {
@@ -21,19 +39,14 @@ export default function JournalEntriesPage() {
   const [loading, setLoading] = useState(true)
   
   // Pagination & Filtering
-  const [page, setPage] = useState(1)
   const [vendorSearch, setVendorSearch] = useState('')
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({})
-
-  useEffect(() => {
-    loadEntries()
-  }, [page, vendorSearch])
 
   const loadEntries = async () => {
     setLoading(true)
     try {
-      const data = await fetchApi('/receipts')
-      const formatted = (data.items || []).map((item: any) => {
+      const data = await apiClient('/receipts')
+      const formatted = (data.items || []).map((item: ReceiptApiItem) => {
         const ext = item.extracted_data || {}
         return {
           id: item.id,
@@ -43,7 +56,7 @@ export default function JournalEntriesPage() {
           category: ext.expense_category || 'Operating Expense',
           total_amount: ext.total_amount || 0,
           status: item.status,
-          line_items: (ext.line_items || []).map((li: any) => ({
+          line_items: (ext.line_items || []).map((li) => ({
             description: li.description,
             quantity: li.quantity || 1,
             unit_price: li.unit_price || 0,
@@ -54,16 +67,27 @@ export default function JournalEntriesPage() {
       
       // Filter locally
       const filtered = vendorSearch 
-        ? formatted.filter((f: any) => f.vendor_name.toLowerCase().includes(vendorSearch.toLowerCase()))
+        ? formatted.filter((f) => f.vendor_name.toLowerCase().includes(vendorSearch.toLowerCase()))
         : formatted;
         
       setEntries(filtered)
-    } catch (err: any) {
-      toast.error('Failed to load journal entries')
+    } catch (err) {
+      const message =
+        err instanceof ApiError
+          ? ((err.body as { error?: string })?.error ?? err.message)
+          : 'Failed to load journal entries'
+      toast.error(message)
     } finally {
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void loadEntries()
+    }, 0)
+    return () => clearTimeout(timer)
+  }, [vendorSearch])
 
   const toggleRow = (id: string) => {
     setExpandedRows(prev => ({...prev, [id]: !prev[id]}))
@@ -88,8 +112,8 @@ export default function JournalEntriesPage() {
       const { data } = await supabase.auth.getSession();
       const token = data.session?.access_token;
 
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
-      const url = new URL(`${baseUrl}/journal-entries/export/${format}`);
+      const baseUrl = process.env.NEXT_PUBLIC_FASTAPI_BASE_URL || 'http://localhost:8000';
+      const url = new URL(`${baseUrl}/api/v1/journal-entries/export/${format}`);
       if (vendorSearch) url.searchParams.append('vendor', vendorSearch);
 
       const response = await fetch(url.toString(), {
@@ -108,8 +132,7 @@ export default function JournalEntriesPage() {
       window.URL.revokeObjectURL(downloadUrl);
       document.body.removeChild(a);
       toast.success(`${format.toUpperCase()} exported successfully`);
-    } catch (err) {
-      console.error(err);
+    } catch {
       toast.error(`Failed to export ${format}`);
     }
   }

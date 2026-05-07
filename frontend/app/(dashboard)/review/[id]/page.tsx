@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, use } from 'react'
 import { useRouter } from 'next/navigation'
-import { fetchApi } from '@/utils/apiClient'
+import { apiClient, ApiError } from '@/lib/api-client'
 import { toast } from 'sonner'
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch'
 import { CheckCircle, AlertTriangle, RefreshCw, ZoomIn, ZoomOut, Maximize, AlertCircle, Save, Cpu } from 'lucide-react'
@@ -58,7 +58,7 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
 
   const loadReceipt = async () => {
     try {
-      const data = await fetchApi(`/receipts/${resolvedParams.id}`)
+      const data = await apiClient(`/receipts/${resolvedParams.id}`)
       setReceipt(data)
       
       if (data.status === 'EXTRACTING' || data.status === 'PENDING') {
@@ -77,8 +77,12 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
         })
         setLineItems(ext.line_items || [])
       }
-    } catch (err: any) {
-      toast.error('Failed to load receipt', { description: err.message })
+    } catch (err) {
+      const message =
+        err instanceof ApiError
+          ? ((err.body as { error?: string })?.error ?? err.message)
+          : 'Failed to load receipt'
+      toast.error('Failed to load receipt', { description: message })
       setPolling(false)
     } finally {
       setLoading(false)
@@ -87,16 +91,21 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
 
   // Poll every 5s if extracting
   useEffect(() => {
-    loadReceipt()
+    const timer = setTimeout(() => {
+      void loadReceipt()
+    }, 0)
     
     let interval: NodeJS.Timeout
     if (polling) {
       interval = setInterval(() => {
-        loadReceipt()
+        void loadReceipt()
       }, 5000)
     }
     
-    return () => clearInterval(interval)
+    return () => {
+      clearTimeout(timer)
+      clearInterval(interval)
+    }
   }, [polling, resolvedParams.id])
 
   // Math Validation (Debits vs Credits)
@@ -141,7 +150,7 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
         })),
       }
 
-      await fetchApi(`/receipts/${resolvedParams.id}/correct`, {
+      await apiClient(`/receipts/${resolvedParams.id}/correct`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(correctionPayload),
@@ -149,7 +158,7 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
 
       if (post) {
         // Journalize the receipt
-        await fetchApi(`/receipts/${resolvedParams.id}/journalize`, {
+        await apiClient(`/receipts/${resolvedParams.id}/journalize`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({}),
@@ -159,8 +168,12 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
       } else {
         toast.success("Changes saved")
       }
-    } catch (err: any) {
-      toast.error("Save failed", { description: err.message })
+    } catch (err) {
+      const message =
+        err instanceof ApiError
+          ? ((err.body as { error?: string })?.error ?? err.message)
+          : 'Save failed'
+      toast.error("Save failed", { description: message })
     }
   }
 

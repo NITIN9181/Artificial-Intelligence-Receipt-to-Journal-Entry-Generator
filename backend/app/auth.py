@@ -11,6 +11,7 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 import httpx
+from supabase import create_client
 
 from app.config import settings
 
@@ -26,6 +27,7 @@ ISSUER = f"{settings.supabase_url}/auth/v1"
 _jwks_cache: Optional[dict] = None
 _jwks_cache_time: float = 0
 JWKS_CACHE_TTL = 3600  # 1 hour
+supabase_client = create_client(settings.supabase_url, settings.supabase_anon_key)
 
 
 async def _get_jwks() -> dict:
@@ -65,8 +67,6 @@ def _decode_token(token: str) -> dict:
         # If local verification fails, fall back to Supabase API (slow path)
         # This handles edge cases like key rotation
         try:
-            from supabase import create_client
-            supabase_client = create_client(settings.supabase_url, settings.supabase_anon_key)
             response = supabase_client.auth.get_user(token)
             if not response or not response.user:
                 raise HTTPException(
