@@ -1,19 +1,32 @@
 # Phase 3 — Team Features (Months 3–6)
 
+## 💰 FREE TIER IMPLEMENTATION
+
+This phase is designed to run at **$0/month** using free-tier services and self-hosted alternatives.
+
+### Free Tier Limits & Workarounds
+
+| Service | Free Tier Limits | Strategy |
+|---------|-----------------|----------|
+| Supabase Free | 500MB DB, 5GB bandwidth, 50K MAU | Monitor usage; upgrade only if exceeded |
+| Ollama (self-hosted) | Unlimited (your hardware) | Use quantized models for efficiency |
+| GnuCash | Unlimited, local | Full desktop app with SQLite backend |
+| CSV/Excel Export | Unlimited | Universal format, works with any accounting software |
+
 ## Prerequisites
 
-- **> 500 receipts/month** OR **> 3 team members**
-- Upgrade to **Supabase Pro** ($25/mo) before starting
-- Upgrade to **NVIDIA NIM paid tier** or self-hosted Ollama cluster for higher throughput
-- QuickBooks Online developer account (requires paid QBO subscription for sandbox)
+- **> 500 receipts/month** OR **> 3 team members** (stay within Supabase Free limits)
+- **Supabase Free Tier** — Monitor usage at supabase.com/dashboard
+- **Ollama self-hosted** — Already set up in Phase 2, no additional cost
+- **GnuCash** (free desktop accounting software) OR use CSV/Excel export for universal compatibility
 
 ## Goal
 
-Add user roles, approval workflows, and QuickBooks integration for team-based accounting operations.
+Add user roles, approval workflows, and accounting software integration for team-based accounting operations — all at zero cost.
 
 ## Deliverables
 
 - [ ] Role-based access: PREPARER, REVIEWER, ADMIN
 - [ ] Approval workflow: Preparer submits → Reviewer approves/rejects with comments
-- [ ] QuickBooks OAuth 2.0 integration with two-way COA sync
-- [ ] "Push to QuickBooks" button on posted journal entries
+- [ ] GnuCash integration via SQLite export OR universal CSV/Excel export
+- [ ] "Export to Accounting Software" button on posted journal entries
