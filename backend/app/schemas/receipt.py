@@ -209,3 +209,28 @@ class ReceiptCorrectRequest(BaseModel):
 class JournalizeRequest(BaseModel):
     """Request for POST /api/v1/receipts/{id}/journalize"""
     account_overrides: Optional[dict[str, str]] = None
+
+
+# --- Phase 3: Review Comment Schemas ---
+
+class ReviewCommentCreate(BaseModel):
+    """Schema for creating a review comment."""
+    comment: str = Field(..., min_length=1, max_length=2000)
+
+
+class ReviewCommentResponse(BaseModel):
+    """Schema for review comment response."""
+    id: UUID
+    receipt_id: UUID
+    reviewer_id: Optional[UUID]
+    comment: str
+    action: str  # APPROVED, REJECTED, RETURNED
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class RejectReceiptRequest(BaseModel):
+    """Request for POST /api/v1/receipts/{id}/reject"""
+    comment: str = Field(..., min_length=1, max_length=2000)

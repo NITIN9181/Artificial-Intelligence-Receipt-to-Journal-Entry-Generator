@@ -133,14 +133,51 @@ async def get_current_user_id(
     return user_id
 
 
-from app.models.user import User
+from app.models.user import User, UserRole
 
 async def require_admin(current_user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """FastAPI dependency — requires the current user to be an admin."""
     user = await db.get(User, current_user["sub"])
-    if not user or not user.is_admin:
+    if not user or user.role != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Admin access required")
     return user
+
+
+def require_role(*roles: UserRole):
+    """
+    Factory function to create role-checking dependencies.
+    
+    Usage:
+        require_reviewer = require_role(UserRole.REVIEWER, UserRole.ADMIN)
+        
+        @router.get("/approval-queue")
+        async def get_queue(user: User = Depends(require_reviewer)):
+            ...
+    """
+    async def role_checker(
+        current_user: dict = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db)
+    ) -> User:
+        user = await db.get(User, current_user["sub"])
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found in database"
+            )
+        if user.role not in roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Requires one of: {[r.value for r in roles]}"
+            )
+        return user
+    return role_checker
+
+
+# Convenience dependencies for common role checks
+require_authenticated = require_role(UserRole.PREPARER, UserRole.REVIEWER, UserRole.ADMIN)  # Any authenticated user
+require_preparer = require_role(UserRole.PREPARER, UserRole.REVIEWER, UserRole.ADMIN)  # Alias for backward compatibility
+require_reviewer = require_role(UserRole.REVIEWER, UserRole.ADMIN)
+require_admin_role = require_role(UserRole.ADMIN)
 
 
 
@@ -159,3 +196,30 @@ async def get_optional_user(
         return _decode_token(token)
     except HTTPException:
         return None
+
+
+def create_test_token(user_id: str, role: str = "PREPARER") -> str:
+    """
+    Create a test JWT token for testing purposes.
+    
+    Args:
+        user_id: User UUID as string
+        role: User role (PREPARER, REVIEWER, or ADMIN)
+        
+    Returns:
+        JWT token string (without "Bearer " prefix)
+    """
+    from datetime import datetime, timedelta, timezone
+    
+    now = datetime.now(tz=timezone.utc)
+    payload = {
+        "sub": str(user_id),
+        "id": str(user_id),
+        "email": f"test-{user_id}@example.com",
+        "aud": "authenticated",
+        "iss": f"{settings.supabase_url}/auth/v1",
+        "iat": int(now.timestamp()),
+        "exp": int((now + timedelta(hours=1)).timestamp()),
+        "role": role
+    }
+    return jwt.encode(payload, SUPABASE_JWT_SECRET, algorithm=ALGORITHM)

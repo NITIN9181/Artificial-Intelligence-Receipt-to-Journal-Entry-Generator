@@ -119,7 +119,7 @@ export default function UploadPage() {
 
   return (
     <div className="flex-1 w-full max-w-5xl mx-auto flex flex-col min-h-full p-6 md:p-12 animate-fade-in">
-      <div className="flex flex-col h-full gap-6">
+      <div className="glass flex flex-col h-full gap-6 p-6 rounded-3xl">
         
         {/* Header Section */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-4">
@@ -130,7 +130,7 @@ export default function UploadPage() {
           <div className="mt-4 md:mt-0 glass-panel px-5 py-2.5 rounded-full flex items-center gap-3 border border-white/10 shadow-[0_4px_20px_rgba(0,0,0,0.3)]">
             <Receipt className="text-tertiary w-4 h-4" />
             <span className="font-mono text-white text-sm font-medium" data-testid="file-count">
-              {selectedFiles.length} of 20 <span className="text-white/50 text-xs ml-1 font-sans font-normal">files</span>
+              {selectedFiles.length} / 20 <span className="text-white/50 text-xs ml-1 font-sans font-normal">receipts/day</span>
             </span>
           </div>
         </div>
@@ -143,7 +143,7 @@ export default function UploadPage() {
         <div 
           {...getRootProps()}
           className={`w-full min-h-[350px] glass-panel-active rounded-2xl flex flex-col items-center justify-center p-8 relative overflow-hidden group border-dashed border transition-all duration-300 cursor-pointer
-            ${isDragActive ? 'border-primary bg-primary/10 scale-[1.02] shadow-[0_0_50px_rgba(192,193,255,0.2)]' : 'border-primary/30 hover:border-primary/60'}`}
+            ${isDragActive ? 'border-primary bg-primary/10 scale-[1.02] shadow-[0_0_50px_rgba(192,193,255,0.2)]' : 'border-primary/30 hover:border-solid hover:border-[#2563EB]'}`}
         >
           <input {...getInputProps()} capture="environment" />
           <div className="absolute inset-0 bg-gradient-to-b from-primary/0 to-primary/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
@@ -159,7 +159,7 @@ export default function UploadPage() {
                   Supports PDF, JPG, PNG up to 20MB. Upload up to 20 receipts at once.
                 </p>
                 <div className="flex flex-col sm:flex-row items-center gap-4 pointer-events-auto">
-                  <button className="px-6 py-3 rounded-full bg-gradient-to-r from-primary to-secondary text-background font-heading text-sm font-bold tracking-wide shadow-[0_0_20px_rgba(192,193,255,0.3)] hover:shadow-[0_0_30px_rgba(192,193,255,0.5)] transition-all transform hover:scale-105 active:scale-95 flex items-center gap-2">
+                  <button className="md:hidden px-6 py-3 rounded-full bg-gradient-to-r from-primary to-secondary text-background font-heading text-sm font-bold tracking-wide shadow-[0_0_20px_rgba(192,193,255,0.3)] hover:shadow-[0_0_30px_rgba(192,193,255,0.5)] transition-all transform hover:scale-105 active:scale-95 flex items-center gap-2">
                     <Camera size={18} />
                     Take Photo
                   </button>

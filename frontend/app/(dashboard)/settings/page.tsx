@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Plus, Settings2, Trash2, Edit2, CheckCircle2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { ApiError } from '@/lib/api-client'
+import GnuCashMappings from '@/components/GnuCashMappings'
 
 type COAEntry = {
   id: string;
@@ -205,6 +206,8 @@ export default function SettingsPage() {
           ))}
         </div>
       </div>
+      
+      <GnuCashMappings />
     </div>
   )
 }

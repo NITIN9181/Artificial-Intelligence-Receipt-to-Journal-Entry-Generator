@@ -29,12 +29,13 @@ class ReceiptStatus(str, enum.Enum):
     EXTRACTION_FAILED = "EXTRACTION_FAILED"
     VALIDATION_FAILED = "VALIDATION_FAILED"
     REVIEWED = "REVIEWED"
+    PENDING_REVIEW = "PENDING_REVIEW"  # Phase 3: Awaiting reviewer approval
     POSTED = "POSTED"
     REJECTED = "REJECTED"
     QUARANTINED = "QUARANTINED"  # Unbalanced entries that failed bookkeeping assertion
 
 
-# Valid state transitions per PRD §FR-5
+# Valid state transitions per PRD §FR-5 + Phase 3 approval workflow
 VALID_TRANSITIONS: dict[ReceiptStatus, set[ReceiptStatus]] = {
     ReceiptStatus.UPLOADED: {ReceiptStatus.EXTRACTING},
     ReceiptStatus.EXTRACTING: {
@@ -48,9 +49,14 @@ VALID_TRANSITIONS: dict[ReceiptStatus, set[ReceiptStatus]] = {
     ReceiptStatus.EXTRACTION_FAILED: {ReceiptStatus.EXTRACTING},  # retry
     ReceiptStatus.VALIDATION_FAILED: {ReceiptStatus.REVIEWED},     # manual fix
     ReceiptStatus.REVIEWED: {
+        ReceiptStatus.PENDING_REVIEW,  # Phase 3: Preparer submits for approval
         ReceiptStatus.POSTED,
         ReceiptStatus.REJECTED,
         ReceiptStatus.QUARANTINED,  # Can transition to QUARANTINED if bookkeeping fails
+    },
+    ReceiptStatus.PENDING_REVIEW: {
+        ReceiptStatus.REVIEWED,  # Reviewer approves or returns for edits
+        ReceiptStatus.REJECTED,  # Reviewer rejects
     },
     ReceiptStatus.POSTED: set(),       # terminal — immutable
     ReceiptStatus.REJECTED: set(),     # terminal
@@ -95,3 +101,21 @@ class Receipt(Base):
 
     # Relationships
     journal_entries = relationship("JournalEntry", back_populates="receipt")
+    review_comments = relationship("ReviewComment", back_populates="receipt", cascade="all, delete-orphan")
+
+
+class ReviewComment(Base):
+    """Review comments for approval workflow (Phase 3)."""
+    __tablename__ = "review_comments"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    receipt_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    reviewer_id = Column(UUID(as_uuid=True), nullable=True, index=True)
+    comment = Column(Text, nullable=False)
+    action = Column(String(20), nullable=False)  # APPROVED, REJECTED, RETURNED
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("NOW()")
+    )
+
+    # Relationships
+    receipt = relationship("Receipt", back_populates="review_comments")

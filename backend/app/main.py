@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import settings
-from app.routers import health, journal_entries, receipts, admin
+from app.routers import health, journal_entries, receipts, admin, gnucash
 
 # Configure logging — NEVER log secrets
 logging.basicConfig(
@@ -68,6 +68,7 @@ app.include_router(health.router)
 app.include_router(receipts.router)
 app.include_router(journal_entries.router)
 app.include_router(admin.router)
+app.include_router(gnucash.router)  # Phase 3: GnuCash export
 
 
 # --- Global Error Handler (Task B7) ---

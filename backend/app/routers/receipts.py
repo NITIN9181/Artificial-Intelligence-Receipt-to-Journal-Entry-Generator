@@ -12,11 +12,12 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Up
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import get_current_user_id
+from app.auth import get_current_user_id, require_preparer, require_reviewer
 from app.config import settings
 from app.database import get_db
 from app.llm_client import llm_client
-from app.models.receipt import Receipt, ReceiptStatus, validate_status_transition
+from app.models.receipt import Receipt, ReceiptStatus, validate_status_transition, ReviewComment
+from app.models.user import User
 from app.schemas.receipt import (
     JournalizeRequest,
     ReceiptCorrectRequest,
@@ -24,6 +25,8 @@ from app.schemas.receipt import (
     ReceiptExtractResponse,
     ReceiptResponse,
     ReceiptUploadResponse,
+    RejectReceiptRequest,
+    ReviewCommentResponse,
 )
 from app.services.extraction import extract_receipt
 from app.services.storage import download_receipt_image, get_signed_url, upload_receipt_image
@@ -565,3 +568,290 @@ async def journalize_receipt(
                 "total_credit": str(e.total_credit),
             },
         )
+
+
+# --- Phase 3: Approval Workflow Endpoints ---
+
+@router.post("/{receipt_id}/submit", response_model=ReceiptResponse)
+async def submit_for_review(
+    receipt_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_preparer)
+):
+    """
+    POST /api/v1/receipts/{id}/submit — Submit receipt for reviewer approval.
+    
+    Transition: REVIEWED → PENDING_REVIEW
+    Role: PREPARER (own receipts only)
+    """
+    receipt = await db.get(Receipt, receipt_id)
+    if not receipt:
+        raise HTTPException(status_code=404, detail="Receipt not found")
+    
+    # Verify ownership
+    if receipt.user_id != user.id:
+        raise HTTPException(status_code=403, detail="Can only submit your own receipts")
+    
+    # Validate state transition
+    current_status = ReceiptStatus(receipt.status)
+    if not validate_status_transition(current_status, ReceiptStatus.PENDING_REVIEW):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Cannot submit receipt in status '{receipt.status}'. Must be REVIEWED."
+        )
+    
+    # Update status
+    old_status = receipt.status.value if isinstance(receipt.status, ReceiptStatus) else receipt.status
+    receipt.status = ReceiptStatus.PENDING_REVIEW
+    
+    # Audit log
+    from sqlalchemy import text
+    audit_query = text("""
+        INSERT INTO audit_logs (table_name, record_id, action, old_values, new_values, performed_by)
+        VALUES ('receipts', :record_id, 'UPDATE', :old_values, :new_values, :performed_by)
+    """)
+    await db.execute(
+        audit_query,
+        {
+            "record_id": str(receipt_id),
+            "old_values": {"status": old_status},
+            "new_values": {"status": "PENDING_REVIEW"},
+            "performed_by": str(user.id),
+        }
+    )
+    
+    await db.commit()
+    
+    # Return response
+    signed_url = await get_signed_url(receipt.image_url)
+    return ReceiptResponse(
+        id=receipt.id,
+        status=receipt.status.value,
+        image_url=signed_url,
+        original_filename=receipt.original_filename,
+        mime_type=receipt.mime_type,
+        file_size_bytes=receipt.file_size_bytes,
+        extracted_data=receipt.extracted_data,
+        confidence_scores=receipt.confidence_scores,
+        extraction_error=receipt.extraction_error,
+        extracted_at=receipt.extracted_at,
+        reviewed_at=receipt.reviewed_at,
+        created_at=receipt.created_at,
+        updated_at=receipt.updated_at,
+    )
+
+
+@router.post("/{receipt_id}/approve", response_model=ReceiptResponse)
+async def approve_receipt(
+    receipt_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_reviewer)
+):
+    """
+    POST /api/v1/receipts/{id}/approve — Approve receipt (reviewer).
+    
+    Transition: PENDING_REVIEW → REVIEWED
+    Role: REVIEWER or ADMIN
+    """
+    receipt = await db.get(Receipt, receipt_id)
+    if not receipt:
+        raise HTTPException(status_code=404, detail="Receipt not found")
+    
+    # Validate state transition
+    current_status = ReceiptStatus(receipt.status)
+    if not validate_status_transition(current_status, ReceiptStatus.REVIEWED):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Cannot approve receipt in status '{receipt.status}'. Must be PENDING_REVIEW."
+        )
+    
+    # Update status
+    old_status = receipt.status.value if isinstance(receipt.status, ReceiptStatus) else receipt.status
+    receipt.status = ReceiptStatus.REVIEWED
+    
+    # Add review comment
+    comment = ReviewComment(
+        receipt_id=receipt.id,
+        reviewer_id=user.id,
+        comment="Approved",
+        action="APPROVED"
+    )
+    db.add(comment)
+    
+    # Audit log
+    from sqlalchemy import text
+    audit_query = text("""
+        INSERT INTO audit_logs (table_name, record_id, action, old_values, new_values, performed_by)
+        VALUES ('receipts', :record_id, 'UPDATE', :old_values, :new_values, :performed_by)
+    """)
+    await db.execute(
+        audit_query,
+        {
+            "record_id": str(receipt_id),
+            "old_values": {"status": old_status},
+            "new_values": {"status": "REVIEWED", "action": "APPROVED"},
+            "performed_by": str(user.id),
+        }
+    )
+    
+    await db.commit()
+    
+    # Return response
+    signed_url = await get_signed_url(receipt.image_url)
+    return ReceiptResponse(
+        id=receipt.id,
+        status=receipt.status.value,
+        image_url=signed_url,
+        original_filename=receipt.original_filename,
+        mime_type=receipt.mime_type,
+        file_size_bytes=receipt.file_size_bytes,
+        extracted_data=receipt.extracted_data,
+        confidence_scores=receipt.confidence_scores,
+        extraction_error=receipt.extraction_error,
+        extracted_at=receipt.extracted_at,
+        reviewed_at=receipt.reviewed_at,
+        created_at=receipt.created_at,
+        updated_at=receipt.updated_at,
+    )
+
+
+@router.post("/{receipt_id}/reject", response_model=ReceiptResponse)
+async def reject_receipt(
+    receipt_id: UUID,
+    data: RejectReceiptRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_reviewer)
+):
+    """
+    POST /api/v1/receipts/{id}/reject — Reject receipt with comment (reviewer).
+    
+    Transition: PENDING_REVIEW → REJECTED
+    Role: REVIEWER or ADMIN
+    """
+    receipt = await db.get(Receipt, receipt_id)
+    if not receipt:
+        raise HTTPException(status_code=404, detail="Receipt not found")
+    
+    # Validate state transition
+    current_status = ReceiptStatus(receipt.status)
+    if not validate_status_transition(current_status, ReceiptStatus.REJECTED):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Cannot reject receipt in status '{receipt.status}'. Must be PENDING_REVIEW."
+        )
+    
+    # Update status
+    old_status = receipt.status.value if isinstance(receipt.status, ReceiptStatus) else receipt.status
+    receipt.status = ReceiptStatus.REJECTED
+    
+    # Add review comment
+    comment = ReviewComment(
+        receipt_id=receipt.id,
+        reviewer_id=user.id,
+        comment=data.comment,
+        action="REJECTED"
+    )
+    db.add(comment)
+    
+    # Audit log
+    from sqlalchemy import text
+    audit_query = text("""
+        INSERT INTO audit_logs (table_name, record_id, action, old_values, new_values, performed_by)
+        VALUES ('receipts', :record_id, 'UPDATE', :old_values, :new_values, :performed_by)
+    """)
+    await db.execute(
+        audit_query,
+        {
+            "record_id": str(receipt_id),
+            "old_values": {"status": old_status},
+            "new_values": {"status": "REJECTED", "comment": data.comment, "action": "REJECTED"},
+            "performed_by": str(user.id),
+        }
+    )
+    
+    await db.commit()
+    
+    # Return response
+    signed_url = await get_signed_url(receipt.image_url)
+    return ReceiptResponse(
+        id=receipt.id,
+        status=receipt.status.value,
+        image_url=signed_url,
+        original_filename=receipt.original_filename,
+        mime_type=receipt.mime_type,
+        file_size_bytes=receipt.file_size_bytes,
+        extracted_data=receipt.extracted_data,
+        confidence_scores=receipt.confidence_scores,
+        extraction_error=receipt.extraction_error,
+        extracted_at=receipt.extracted_at,
+        reviewed_at=receipt.reviewed_at,
+        created_at=receipt.created_at,
+        updated_at=receipt.updated_at,
+    )
+
+
+@router.get("/pending-review", status_code=200)
+async def list_pending_review(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_reviewer),
+    skip: int = 0,
+    limit: int = 25
+):
+    """
+    GET /api/v1/receipts/pending-review — List all receipts awaiting review.
+    
+    Returns: All receipts with status = PENDING_REVIEW (any user)
+    Role: REVIEWER or ADMIN
+    """
+    result = await db.execute(
+        select(Receipt)
+        .where(Receipt.status == ReceiptStatus.PENDING_REVIEW)
+        .order_by(Receipt.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+    )
+    receipts = result.scalars().all()
+    
+    items = []
+    for r in receipts:
+        signed_url = await get_signed_url(r.image_url)
+        items.append({
+            "id": str(r.id),
+            "user_id": str(r.user_id),
+            "status": r.status.value if isinstance(r.status, ReceiptStatus) else r.status,
+            "image_url": signed_url,
+            "original_filename": r.original_filename,
+            "extracted_data": r.extracted_data,
+            "confidence_scores": r.confidence_scores,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+            "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+        })
+    
+    return {"items": items, "total": len(items)}
+
+
+@router.get("/{receipt_id}/comments", response_model=list[ReviewCommentResponse])
+async def get_review_comments(
+    receipt_id: UUID,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    GET /api/v1/receipts/{id}/comments — Get all review comments for a receipt.
+    
+    Returns: List of review comments with reviewer info
+    """
+    # Verify receipt exists and user has access
+    receipt = await db.get(Receipt, receipt_id)
+    if not receipt or str(receipt.user_id) != user_id:
+        raise HTTPException(status_code=404, detail="Receipt not found")
+    
+    # Fetch comments
+    result = await db.execute(
+        select(ReviewComment)
+        .where(ReviewComment.receipt_id == receipt_id)
+        .order_by(ReviewComment.created_at.desc())
+    )
+    comments = result.scalars().all()
+    
+    return comments

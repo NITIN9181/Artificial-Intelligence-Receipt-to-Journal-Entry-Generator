@@ -3,7 +3,8 @@
 import React, { useState, useEffect } from 'react'
 import { apiClient, ApiError } from '@/lib/api-client'
 import { toast } from 'sonner'
-import { Search, Filter, ChevronDown, ChevronRight, FileText, FileDown, Receipt as ReceiptIcon } from 'lucide-react'
+import { Search, Filter, ChevronDown, ChevronRight, FileText, FileDown, Receipt as ReceiptIcon, MoreVertical } from 'lucide-react'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 
 type JournalEntry = {
   id: string;
@@ -137,6 +138,40 @@ export default function JournalEntriesPage() {
     }
   }
 
+  const handleIndividualExport = async (id: string, format: 'xml' | 'csv' | 'sqlite', entryNumber: string) => {
+    try {
+      const { createClient } = await import('@/utils/supabase/client');
+      const supabase = createClient();
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+
+      const baseUrl = process.env.NEXT_PUBLIC_FASTAPI_BASE_URL || 'http://localhost:8000';
+      const url = new URL(`${baseUrl}/api/v1/gnucash/journal-entries/${id}/export?format=${format}`);
+
+      const response = await fetch(url.toString(), {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (!response.ok) throw new Error('Export failed');
+
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = `JE_${entryNumber}.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+      
+      const formatName = format === 'xml' ? 'GnuCash XML' : format.toUpperCase();
+      toast.success(`Exported ${entryNumber} to ${formatName}`);
+    } catch {
+      toast.error(`Failed to export ${entryNumber}`);
+    }
+  }
+
   return (
     <div className="flex-1 w-full max-w-[1400px] mx-auto p-4 md:p-6 lg:p-8 animate-fade-in pb-32">
       
@@ -231,9 +266,33 @@ export default function JournalEntriesPage() {
                       <td className="px-6 py-4 font-mono text-sm text-white text-right font-bold">${(Number(entry.total_amount) || 0).toFixed(2)}</td>
                       <td className="px-6 py-4 text-center">{getStatusBadge(entry.status)}</td>
                       <td className="px-6 py-4 text-center">
-                        <button className="text-tertiary hover:text-white transition-colors" onClick={(e) => { e.stopPropagation(); window.location.href = `/review/${entry.id}` }}>
-                          <ReceiptIcon size={16} className="inline" />
-                        </button>
+                        <div className="flex items-center justify-center gap-2">
+                          <button className="text-tertiary hover:text-white transition-colors" onClick={(e) => { e.stopPropagation(); window.location.href = `/review/${entry.id}` }}>
+                            <ReceiptIcon size={16} />
+                          </button>
+                          {entry.status === 'POSTED' && (
+                            <div onClick={(e) => e.stopPropagation()}>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <button className="text-foreground/50 hover:text-white transition-colors p-1">
+                                    <MoreVertical size={16} />
+                                  </button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="bg-surface-container-high border-white/10 text-white">
+                                  <DropdownMenuItem onClick={() => handleIndividualExport(entry.id, 'xml', entry.entry_number)} className="hover:bg-white/10 cursor-pointer">
+                                    Export as GnuCash XML
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => handleIndividualExport(entry.id, 'csv', entry.entry_number)} className="hover:bg-white/10 cursor-pointer">
+                                    Export as CSV
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => handleIndividualExport(entry.id, 'sqlite', entry.entry_number)} className="hover:bg-white/10 cursor-pointer">
+                                    Export as SQLite
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          )}
+                        </div>
                       </td>
                     </tr>
                     

@@ -10,9 +10,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import require_admin
+from app.auth import require_admin, require_admin_role
 from app.database import get_db
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.models.receipt import Receipt
 from app.models.usage import UsageSnapshot
 
@@ -97,6 +97,35 @@ async def get_usage_stats(
         "usage_threshold_flag": usage_threshold_flag,
         "checked_at": datetime.now().isoformat(),
     }
+
+
+@router.get("/usage/flag", status_code=200)
+async def get_usage_flag(
+    admin_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    GET /api/v1/admin/usage/flag
+    Returns structured data for the frontend admin usage banner.
+    """
+    stats = await get_usage_stats(admin_user, db)
+    postgres_limit_mb = 500.0
+    
+    postgres_percent = stats["postgres_percent"]
+    requests_percent = stats["requests_percent"]
+    
+    threshold_hit = stats["usage_threshold_flag"]
+    alert_message = f"Database usage at {postgres_percent}%. Export old data to free up space." if threshold_hit else ""
+    
+    return {
+        "threshold_hit": threshold_hit,
+        "postgres_mb": stats["postgres_mb"],
+        "postgres_percent": postgres_percent,
+        "requests_today": stats["daily_requests"],
+        "requests_percent": requests_percent,
+        "alert_message": alert_message,
+    }
+
 
 
 @router.post("/usage/snapshot", status_code=201)
@@ -207,4 +236,103 @@ async def get_admin_stats(
         "total_receipts": total_receipts,
         "receipts_by_status": status_counts,
         "generated_at": datetime.now().isoformat(),
+    }
+
+
+# --- Phase 3: User Role Management ---
+
+from pydantic import BaseModel
+
+class UpdateUserRoleRequest(BaseModel):
+    """Request to update a user's role."""
+    role: UserRole
+
+
+@router.get("/users", status_code=200)
+async def list_users(
+    admin_user: User = Depends(require_admin_role),
+    db: AsyncSession = Depends(get_db),
+    skip: int = 0,
+    limit: int = 50
+):
+    """
+    GET /api/v1/admin/users
+    
+    List all users with their roles.
+    Requires ADMIN role.
+    """
+    result = await db.execute(
+        select(User)
+        .order_by(User.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+    )
+    users = result.scalars().all()
+    
+    return {
+        "users": [
+            {
+                "id": str(u.id),
+                "full_name": u.full_name,
+                "company_name": u.company_name,
+                "role": u.role.value if isinstance(u.role, UserRole) else u.role,
+                "created_at": u.created_at.isoformat() if u.created_at else None,
+            }
+            for u in users
+        ],
+        "total": len(users),
+    }
+
+
+@router.put("/users/{user_id}/role", status_code=200)
+async def update_user_role(
+    user_id: str,
+    request: UpdateUserRoleRequest,
+    admin_user: User = Depends(require_admin_role),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    PUT /api/v1/admin/users/{user_id}/role
+    
+    Change a user's role (PREPARER, REVIEWER, or ADMIN).
+    Requires ADMIN role.
+    """
+    from uuid import UUID as UUIDType
+    
+    try:
+        user_uuid = UUIDType(user_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid user ID format")
+    
+    user = await db.get(User, user_uuid)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Update role
+    old_role = user.role.value if isinstance(user.role, UserRole) else user.role
+    user.role = request.role
+    
+    # Audit log
+    audit_query = text("""
+        INSERT INTO audit_logs (table_name, record_id, action, old_values, new_values, performed_by)
+        VALUES ('users', :record_id, 'UPDATE', :old_values, :new_values, :performed_by)
+    """)
+    await db.execute(
+        audit_query,
+        {
+            "record_id": str(user_id),
+            "old_values": {"role": old_role},
+            "new_values": {"role": request.role.value},
+            "performed_by": str(admin_user.id),
+        }
+    )
+    
+    await db.commit()
+    await db.refresh(user)
+    
+    return {
+        "id": str(user.id),
+        "full_name": user.full_name,
+        "role": user.role.value if isinstance(user.role, UserRole) else user.role,
+        "updated_at": datetime.now().isoformat(),
     }

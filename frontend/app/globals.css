@@ -13,8 +13,12 @@
 
   /* ── Semantic Color Aliases ── */
   --color-background: #0b1326;
+  --color-primary-text: #dae2fd;
+  --color-brand-accent: #c0c1ff;
+  --color-brand-accent-alt: #ddb7ff;
+  --color-surface: rgba(255, 255, 255, 0.05);
+
   --color-foreground: #dae2fd;
-  --color-surface: #0b1326;
   --color-surface-container: #171f33;
   --color-surface-container-high: #222a3d;
   --color-surface-container-highest: #2d3449;
@@ -116,4 +120,20 @@ body {
 }
 .animate-spin-slow {
   animation: spin-slow 3s linear infinite;
+}
+
+/* ── Glassmorphism Utilities ── */
+.glass {
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  background: rgba(11, 19, 38, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.glass-light {
+  backdrop-filter: blur(20px);
+  background: rgba(11, 19, 38, 0.4);
+}
+.glass-strong {
+  backdrop-filter: blur(20px);
+  background: rgba(11, 19, 38, 0.8);
 }
