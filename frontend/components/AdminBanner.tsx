@@ -16,7 +16,7 @@ export default function AdminBanner() {
 
   const checkUsage = async () => {
     try {
-      const data = await fetchApi('/admin/usage')
+      const data = await fetchApi('/admin/usage') as any
       setUsageData(data)
       if (data.alert_active) {
         setVisible(true)

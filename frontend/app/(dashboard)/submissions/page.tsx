@@ -127,7 +127,7 @@ export default function SubmissionsPage() {
     if (!acc[status]) acc[status] = [];
     acc[status].push(receipt);
     return acc;
-  }, {} as Record<ReceiptStatus, Receipt[]>) || {};
+  }, {} as Record<ReceiptStatus, Receipt[]>) || ({} as Record<ReceiptStatus, Receipt[]>);
 
   const statusOrder: ReceiptStatus[] = ['REVIEWED', 'PENDING_REVIEW', 'REJECTED', 'POSTED', 'EXTRACTED', 'UPLOADED'];
 

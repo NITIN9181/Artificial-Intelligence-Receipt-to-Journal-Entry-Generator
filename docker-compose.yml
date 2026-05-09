@@ -56,6 +56,7 @@ services:
       SUPABASE_URL: https://chazqctmrgyaewmlpgjv.supabase.co
       SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNoYXpxY3Rtcmd5YWV3bWxwZ2p2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5MDA1NTIsImV4cCI6MjA5MzQ3NjU1Mn0.bKnyt7jGpC1dQPxp_ufZM47Q3vvOpXaOatqxXhVmwBA
       SUPABASE_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNoYXpxY3Rtcmd5YWV3bWxwZ2p2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzkwMDU1MiwiZXhwIjoyMDkzNDc2NTUyfQ.SUVihJsnrUf9FWBKTyBGXGdyL0v1HtNKu-y8IIMkeLI
+      SUPABASE_JWT_SECRET: super-secret-jwt-token-with-at-least-32-characters-long
       STORAGE_ENDPOINT: http://minio:9000
       STORAGE_ACCESS_KEY: minioadmin
       STORAGE_SECRET_KEY: minioadmin
@@ -79,10 +80,6 @@ services:
       NEXT_PUBLIC_SUPABASE_URL: https://chazqctmrgyaewmlpgjv.supabase.co
       NEXT_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNoYXpxY3Rtcmd5YWV3bWxwZ2p2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5MDA1NTIsImV4cCI6MjA5MzQ3NjU1Mn0.bKnyt7jGpC1dQPxp_ufZM47Q3vvOpXaOatqxXhVmwBA
       NEXT_PUBLIC_API_URL: http://localhost:8000/api/v1
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-      - /app/.next
     ports:
       - "3000:3000"
     depends_on:

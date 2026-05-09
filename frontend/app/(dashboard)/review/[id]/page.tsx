@@ -58,7 +58,7 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
 
   const loadReceipt = async () => {
     try {
-      const data = await apiClient(`/receipts/${resolvedParams.id}`)
+      const data = await apiClient(`/receipts/${resolvedParams.id}`) as any
       setReceipt(data)
       
       if (data.status === 'EXTRACTING' || data.status === 'PENDING') {

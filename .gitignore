@@ -46,3 +46,7 @@ FIX_SUMMARY.md
 INDEPENDENT_AUDIT_VERIFICATION.md
 PRD_AUDIT_REPORT.md
 phases
+playwright-report/
+test-results/
+.pytest_cache/
+qa_test_report.md

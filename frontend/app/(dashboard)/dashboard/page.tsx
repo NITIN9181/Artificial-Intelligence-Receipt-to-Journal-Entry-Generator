@@ -26,7 +26,7 @@ export default function DashboardPage() {
 
   const loadData = async () => {
     try {
-      const data = await fetchApi('/receipts?limit=100')
+      const data = await fetchApi('/receipts?limit=100') as any
       setReceipts(data.items || [])
     } catch (err: any) {
       toast.error('Failed to load dashboard data')

@@ -277,7 +277,7 @@ class GnuCashExporter:
             output.write(f"INSERT INTO transactions (guid, post_date, enter_date, description) VALUES ")
             output.write(f"('{txn_guid}', '{entry.entry_date.strftime('%Y-%m-%d')}', ")
             output.write(f"'{entry.created_at.strftime('%Y-%m-%d %H:%M:%S')}', ")
-            output.write(f"'{entry.description or f'Journal Entry {entry.entry_number'}');\n")
+            output.write(f"'{entry.description or f'Journal Entry {entry.entry_number}'}');\n")
             
             # Insert splits
             for line in entry.lines:

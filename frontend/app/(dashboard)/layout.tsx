@@ -12,7 +12,7 @@ export default async function DashboardLayout({
   const { data: { user } } = await supabase.auth.getUser();
 
   return (
-    <div className="flex-1 w-full flex flex-col md:flex-row relative z-10">
+    <div className="flex-1 w-full flex flex-col md:flex-row relative z-10 min-h-screen overflow-x-hidden">
       {/* SideNavBar (WEB) */}
       <nav className="hidden md:flex flex-col fixed left-0 top-0 h-full w-64 bg-black/40 backdrop-blur-[40px] border-r border-white/5 shadow-[20px_0_40px_rgba(0,0,0,0.5)] z-40 py-8 transition-all duration-300 ease-in-out">
         <div className="px-8 mb-12">
@@ -62,21 +62,32 @@ export default async function DashboardLayout({
         </div>
       </nav>
 
-      {/* TopNavBar (WEB) */}
-      <header className="hidden md:flex fixed top-0 w-full z-30 justify-between items-center px-8 h-16 bg-background/40 backdrop-blur-[20px] border-b border-white/10 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] pl-[calc(16rem+2rem)]">
-        <div className="flex space-x-8"></div>
-        <div className="flex items-center gap-6">
-          <div className="flex items-center gap-4 text-white/60">
-            <Bell className="w-5 h-5 cursor-pointer hover:text-white hover:bg-white/5 transition-colors p-1.5 box-content rounded-full active:scale-95 duration-200" />
-            <Link href="/settings">
-              <Settings className="w-5 h-5 cursor-pointer hover:text-white hover:bg-white/5 transition-colors p-1.5 box-content rounded-full active:scale-95 duration-200" />
-            </Link>
+      {/* Main Content + Top Nav Wrapper */}
+      <div className="flex-1 flex flex-col md:ml-64 w-full relative z-10">
+        {/* TopNavBar (WEB) */}
+        <header className="hidden md:flex w-full justify-between items-center px-8 h-20">
+          <div className="flex space-x-8"></div>
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-4 text-white/60">
+              <Bell className="w-5 h-5 cursor-pointer hover:text-white hover:bg-white/5 transition-colors p-1.5 box-content rounded-full active:scale-95 duration-200" />
+              <Link href="/settings">
+                <Settings className="w-5 h-5 cursor-pointer hover:text-white hover:bg-white/5 transition-colors p-1.5 box-content rounded-full active:scale-95 duration-200" />
+              </Link>
+            </div>
+            <button className="px-5 py-2 rounded-full border border-white/20 text-white font-sans text-sm hover:bg-white/10 transition-colors">
+              Upgrade
+            </button>
           </div>
-          <button className="px-5 py-2 rounded-full border border-white/20 text-white font-sans text-sm hover:bg-white/10 transition-colors">
-            Upgrade
-          </button>
-        </div>
-      </header>
+        </header>
+
+        {/* Admin Banner (only visible to admins when threshold hit) */}
+        <AdminBanner />
+
+        {/* Main Content Area */}
+        <main className="flex-1 w-full pb-20 md:pb-0">
+          {children}
+        </main>
+      </div>
 
       {/* Mobile NavBar */}
       <header className="md:hidden flex items-center justify-between p-4 bg-background/80 backdrop-blur-md border-b border-white/10 fixed top-0 w-full z-30">
@@ -88,16 +99,6 @@ export default async function DashboardLayout({
           <Settings size={20} />
         </Link>
       </header>
-
-      {/* Admin Banner (only visible to admins when threshold hit) */}
-      <div className="md:ml-64 md:pt-16 pt-16">
-        <AdminBanner />
-      </div>
-
-      {/* Main Content Area */}
-      <main className="flex-1 w-full flex flex-col md:ml-64 relative z-10 pb-20 md:pb-0 min-h-screen">
-        {children}
-      </main>
       
       {/* BottomNavBar (MOBILE) */}
       <nav className="md:hidden fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-6 pb-6 pt-3 bg-background/80 backdrop-blur-[30px] border-t border-white/10 rounded-t-[32px] shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">

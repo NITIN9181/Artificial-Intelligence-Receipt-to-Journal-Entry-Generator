@@ -32,7 +32,7 @@ export default function UploadPage() {
       const formData = new FormData()
       formData.append('file', fileToUpload, file.name)
       
-      const response = await apiClient('/receipts/upload', { method: 'POST', body: formData })
+      const response = await apiClient('/receipts/upload', { method: 'POST', body: formData }) as any
       await apiClient(`/receipts/${response.id}/extract`, { method: 'POST' })
 
       toast.success('Receipt uploaded successfully!')
@@ -66,7 +66,7 @@ export default function UploadPage() {
       const response = await apiClient('/receipts/bulk-upload', {
         method: 'POST',
         body: formData
-      });
+      }) as any;
 
       toast.success(`${response.total} receipts uploaded successfully!`);
       setBatchData({ batchId: response.batch_id, receipts: response.receipts });

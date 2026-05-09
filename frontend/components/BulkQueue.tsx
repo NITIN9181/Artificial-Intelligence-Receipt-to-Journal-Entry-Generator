@@ -29,11 +29,11 @@ export default function BulkQueue({ batchId, initialReceipts }: { batchId: strin
   const pollBatchStatus = () => {
     const interval = setInterval(async () => {
       try {
-        const status = await fetchApi(`/receipts/batch/${batchId}`);
+        const status = await fetchApi(`/receipts/batch/${batchId}`) as any;
         setBatchStatus(status);
         
         // Fetch individual receipts to update cards
-        const batchReceipts = await fetchApi('/receipts?limit=100');
+        const batchReceipts = await fetchApi('/receipts?limit=100') as any;
         const updated = batchReceipts.items.filter((r: any) => r.id && receipts.some(ir => ir.id === r.id));
         if (updated.length > 0) {
             setReceipts(prev => prev.map(r => updated.find((ur: any) => ur.id === r.id) || r));

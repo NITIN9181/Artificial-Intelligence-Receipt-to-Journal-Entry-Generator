@@ -46,7 +46,7 @@ export default function JournalEntriesPage() {
   const loadEntries = async () => {
     setLoading(true)
     try {
-      const data = await apiClient('/receipts')
+      const data = await apiClient('/receipts') as any
       const formatted = (data.items || []).map((item: ReceiptApiItem) => {
         const ext = item.extracted_data || {}
         return {
@@ -68,7 +68,7 @@ export default function JournalEntriesPage() {
       
       // Filter locally
       const filtered = vendorSearch 
-        ? formatted.filter((f) => f.vendor_name.toLowerCase().includes(vendorSearch.toLowerCase()))
+        ? formatted.filter((f: any) => f.vendor_name.toLowerCase().includes(vendorSearch.toLowerCase()))
         : formatted;
         
       setEntries(filtered)
