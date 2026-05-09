@@ -25,6 +25,8 @@ def upgrade() -> None:
           threshold_hit        BOOLEAN NOT NULL DEFAULT FALSE,
           alert_logged         BOOLEAN NOT NULL DEFAULT FALSE
         );
+    """)
+    op.execute("""
         CREATE INDEX idx_usage_snapshots_checked_at ON usage_snapshots(checked_at DESC);
     """)
 

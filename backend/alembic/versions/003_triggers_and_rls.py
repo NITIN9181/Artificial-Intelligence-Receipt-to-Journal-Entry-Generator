@@ -16,8 +16,18 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # --- MOCK SUPABASE AUTH FOR LOCAL POSTGRES ---
+    op.execute("CREATE SCHEMA IF NOT EXISTS auth;")
+    op.execute("""
+        CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid AS $$
+        BEGIN
+            RETURN NULL;
+        END;
+        $$ LANGUAGE plpgsql;
+    """)
+
     # --- TRIGGER FUNCTIONS ---
-    op.execute(\"\"\"
+    op.execute("""
         CREATE OR REPLACE FUNCTION fn_audit_log()
         RETURNS TRIGGER AS $$
         BEGIN
@@ -37,21 +47,21 @@ def upgrade() -> None:
             RETURN NULL;
         END;
         $$ LANGUAGE plpgsql SECURITY DEFINER;
-    \"\"\")
+    """)
 
-    op.execute(\"\"\"
+    op.execute("""
         CREATE TRIGGER trg_receipts_audit
         AFTER INSERT OR UPDATE OR DELETE ON receipts
         FOR EACH ROW EXECUTE FUNCTION fn_audit_log();
-    \"\"\")
+    """)
     
-    op.execute(\"\"\"
+    op.execute("""
         CREATE TRIGGER trg_journal_entries_audit
         AFTER INSERT OR UPDATE OR DELETE ON journal_entries
         FOR EACH ROW EXECUTE FUNCTION fn_audit_log();
-    \"\"\")
+    """)
 
-    op.execute(\"\"\"
+    op.execute("""
         CREATE OR REPLACE FUNCTION fn_set_updated_at()
         RETURNS TRIGGER AS $$
         BEGIN
@@ -59,45 +69,45 @@ def upgrade() -> None:
             RETURN NEW;
         END;
         $$ LANGUAGE plpgsql;
-    \"\"\")
+    """)
 
-    op.execute(\"\"\"
+    op.execute("""
         CREATE TRIGGER trg_receipts_updated_at
         BEFORE UPDATE ON receipts
         FOR EACH ROW EXECUTE FUNCTION fn_set_updated_at();
-    \"\"\")
+    """)
 
     # --- ROW LEVEL SECURITY POLICIES ---
-    op.execute(\"ALTER TABLE receipts ENABLE ROW LEVEL SECURITY;\")
-    op.execute(\"ALTER TABLE chart_of_accounts ENABLE ROW LEVEL SECURITY;\")
-    op.execute(\"ALTER TABLE vendor_category_mappings ENABLE ROW LEVEL SECURITY;\")
-    op.execute(\"ALTER TABLE journal_entries ENABLE ROW LEVEL SECURITY;\")
-    op.execute(\"ALTER TABLE journal_entry_lines ENABLE ROW LEVEL SECURITY;\")
+    op.execute("ALTER TABLE receipts ENABLE ROW LEVEL SECURITY;")
+    op.execute("ALTER TABLE chart_of_accounts ENABLE ROW LEVEL SECURITY;")
+    op.execute("ALTER TABLE vendor_category_mappings ENABLE ROW LEVEL SECURITY;")
+    op.execute("ALTER TABLE journal_entries ENABLE ROW LEVEL SECURITY;")
+    op.execute("ALTER TABLE journal_entry_lines ENABLE ROW LEVEL SECURITY;")
 
-    op.execute(\"\"\"
-        CREATE POLICY \"user_receipts_isolation\" ON receipts
+    op.execute("""
+        CREATE POLICY "user_receipts_isolation" ON receipts
         FOR ALL USING (user_id = auth.uid());
-    \"\"\")
+    """)
 
-    op.execute(\"\"\"
-        CREATE POLICY \"user_coa_isolation\" ON chart_of_accounts
+    op.execute("""
+        CREATE POLICY "user_coa_isolation" ON chart_of_accounts
         FOR ALL USING (user_id = auth.uid() OR user_id IS NULL);
-    \"\"\")
+    """)
 
-    op.execute(\"\"\"
-        CREATE POLICY \"user_vcm_isolation\" ON vendor_category_mappings
+    op.execute("""
+        CREATE POLICY "user_vcm_isolation" ON vendor_category_mappings
         FOR ALL USING (user_id = auth.uid() OR user_id IS NULL);
-    \"\"\")
+    """)
 
-    op.execute(\"\"\"
-        CREATE POLICY \"user_je_isolation\" ON journal_entries
+    op.execute("""
+        CREATE POLICY "user_je_isolation" ON journal_entries
         FOR ALL USING (
             EXISTS (SELECT 1 FROM receipts WHERE receipts.id = journal_entries.receipt_id AND receipts.user_id = auth.uid())
         );
-    \"\"\")
+    """)
 
-    op.execute(\"\"\"
-        CREATE POLICY \"user_jel_isolation\" ON journal_entry_lines
+    op.execute("""
+        CREATE POLICY "user_jel_isolation" ON journal_entry_lines
         FOR ALL USING (
             EXISTS (
                 SELECT 1 FROM journal_entries 
@@ -106,27 +116,27 @@ def upgrade() -> None:
                 AND receipts.user_id = auth.uid()
             )
         );
-    \"\"\")
+    """)
 
 
 def downgrade() -> None:
     # Drop policies
-    op.execute(\"DROP POLICY IF EXISTS user_jel_isolation ON journal_entry_lines;\")
-    op.execute(\"DROP POLICY IF EXISTS user_je_isolation ON journal_entries;\")
-    op.execute(\"DROP POLICY IF EXISTS user_vcm_isolation ON vendor_category_mappings;\")
-    op.execute(\"DROP POLICY IF EXISTS user_coa_isolation ON chart_of_accounts;\")
-    op.execute(\"DROP POLICY IF EXISTS user_receipts_isolation ON receipts;\")
+    op.execute("DROP POLICY IF EXISTS user_jel_isolation ON journal_entry_lines;")
+    op.execute("DROP POLICY IF EXISTS user_je_isolation ON journal_entries;")
+    op.execute("DROP POLICY IF EXISTS user_vcm_isolation ON vendor_category_mappings;")
+    op.execute("DROP POLICY IF EXISTS user_coa_isolation ON chart_of_accounts;")
+    op.execute("DROP POLICY IF EXISTS user_receipts_isolation ON receipts;")
 
     # Disable RLS
-    op.execute(\"ALTER TABLE journal_entry_lines DISABLE ROW LEVEL SECURITY;\")
-    op.execute(\"ALTER TABLE journal_entries DISABLE ROW LEVEL SECURITY;\")
-    op.execute(\"ALTER TABLE vendor_category_mappings DISABLE ROW LEVEL SECURITY;\")
-    op.execute(\"ALTER TABLE chart_of_accounts DISABLE ROW LEVEL SECURITY;\")
-    op.execute(\"ALTER TABLE receipts DISABLE ROW LEVEL SECURITY;\")
+    op.execute("ALTER TABLE journal_entry_lines DISABLE ROW LEVEL SECURITY;")
+    op.execute("ALTER TABLE journal_entries DISABLE ROW LEVEL SECURITY;")
+    op.execute("ALTER TABLE vendor_category_mappings DISABLE ROW LEVEL SECURITY;")
+    op.execute("ALTER TABLE chart_of_accounts DISABLE ROW LEVEL SECURITY;")
+    op.execute("ALTER TABLE receipts DISABLE ROW LEVEL SECURITY;")
 
     # Drop triggers and functions
-    op.execute(\"DROP TRIGGER IF EXISTS trg_receipts_updated_at ON receipts;\")
-    op.execute(\"DROP FUNCTION IF EXISTS fn_set_updated_at();\")
-    op.execute(\"DROP TRIGGER IF EXISTS trg_journal_entries_audit ON journal_entries;\")
-    op.execute(\"DROP TRIGGER IF EXISTS trg_receipts_audit ON receipts;\")
-    op.execute(\"DROP FUNCTION IF EXISTS fn_audit_log();\")
+    op.execute("DROP TRIGGER IF EXISTS trg_receipts_updated_at ON receipts;")
+    op.execute("DROP FUNCTION IF EXISTS fn_set_updated_at();")
+    op.execute("DROP TRIGGER IF EXISTS trg_journal_entries_audit ON journal_entries;")
+    op.execute("DROP TRIGGER IF EXISTS trg_receipts_audit ON receipts;")
+    op.execute("DROP FUNCTION IF EXISTS fn_audit_log();")

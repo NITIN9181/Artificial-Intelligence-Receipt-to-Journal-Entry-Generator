@@ -23,16 +23,16 @@ def upgrade() -> None:
     op.execute("CREATE TYPE entry_status AS ENUM ('DRAFT','POSTED','REVERSED','QUARANTINED');")
 
     # --- TABLES ---
-    op.execute(\"\"\"
+    op.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id UUID PRIMARY KEY,
             full_name TEXT,
             company_name TEXT,
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
-    \"\"\")
+    """)
 
-    op.execute(\"\"\"
+    op.execute("""
         CREATE TABLE receipts (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -50,12 +50,12 @@ def upgrade() -> None:
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
-    \"\"\")
+    """)
     op.execute("CREATE INDEX idx_receipts_user_id ON receipts(user_id);")
     op.execute("CREATE INDEX idx_receipts_status ON receipts(status);")
     op.execute("CREATE INDEX idx_receipts_created_at ON receipts(created_at DESC);")
 
-    op.execute(\"\"\"
+    op.execute("""
         CREATE TABLE chart_of_accounts (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             user_id UUID REFERENCES users(id) ON DELETE CASCADE,
@@ -68,10 +68,10 @@ def upgrade() -> None:
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             UNIQUE(user_id, code)
         );
-    \"\"\")
+    """)
     op.execute("CREATE INDEX idx_coa_user_id ON chart_of_accounts(user_id);")
 
-    op.execute(\"\"\"
+    op.execute("""
         CREATE TABLE vendor_category_mappings (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             user_id UUID REFERENCES users(id) ON DELETE CASCADE,
@@ -80,10 +80,10 @@ def upgrade() -> None:
             is_default BOOLEAN NOT NULL DEFAULT FALSE,
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
-    \"\"\")
+    """)
     op.execute("CREATE INDEX idx_vcm_user_id ON vendor_category_mappings(user_id);")
 
-    op.execute(\"\"\"
+    op.execute("""
         CREATE TABLE journal_entries (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             receipt_id UUID NOT NULL REFERENCES receipts(id),
@@ -101,13 +101,13 @@ def upgrade() -> None:
             CONSTRAINT chk_balanced CHECK (total_debit = total_credit),
             CONSTRAINT chk_positive_totals CHECK (total_debit >= 0 AND total_credit >= 0)
         );
-    \"\"\")
+    """)
     op.execute("CREATE INDEX idx_je_receipt_id ON journal_entries(receipt_id);")
     op.execute("CREATE INDEX idx_je_entry_date ON journal_entries(entry_date DESC);")
     op.execute("CREATE INDEX idx_je_status ON journal_entries(status);")
     op.execute("CREATE INDEX idx_je_posted_by ON journal_entries(posted_by);")
 
-    op.execute(\"\"\"
+    op.execute("""
         CREATE TABLE journal_entry_lines (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             journal_entry_id UUID NOT NULL REFERENCES journal_entries(id) ON DELETE CASCADE,
@@ -121,10 +121,10 @@ def upgrade() -> None:
                 (debit > 0 AND credit = 0) OR (credit > 0 AND debit = 0)
             )
         );
-    \"\"\")
+    """)
     op.execute("CREATE INDEX idx_jel_entry_id ON journal_entry_lines(journal_entry_id);")
 
-    op.execute(\"\"\"
+    op.execute("""
         CREATE TABLE audit_logs (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             table_name TEXT NOT NULL,
@@ -135,7 +135,7 @@ def upgrade() -> None:
             performed_by UUID REFERENCES users(id),
             performed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
-    \"\"\")
+    """)
     op.execute("CREATE INDEX idx_audit_table_record ON audit_logs(table_name, record_id);")
     op.execute("CREATE INDEX idx_audit_performed_at ON audit_logs(performed_at DESC);")
 

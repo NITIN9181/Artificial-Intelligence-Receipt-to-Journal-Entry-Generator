@@ -17,7 +17,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     # --- CHART OF ACCOUNTS SEED ---
-    op.execute(\"\"\"
+    op.execute("""
         INSERT INTO chart_of_accounts (user_id, code, name, type, normal_balance, is_default) VALUES
         (NULL, '1010', 'Cash',                     'ASSET',     'DEBIT',  TRUE),
         (NULL, '1020', 'Checking Account',          'ASSET',     'DEBIT',  TRUE),
@@ -37,10 +37,10 @@ def upgrade() -> None:
         (NULL, '5999', 'Miscellaneous Expense',     'EXPENSE',   'DEBIT',  TRUE),
         (NULL, '6000', 'Service Revenue',           'REVENUE',   'CREDIT', TRUE),
         (NULL, '6100', 'Product Sales',             'REVENUE',   'CREDIT', TRUE);
-    \"\"\")
+    """)
 
     # --- VENDOR CATEGORY MAPPINGS SEED ---
-    op.execute(\"\"\"
+    op.execute("""
         INSERT INTO vendor_category_mappings (user_id, vendor_name_pattern, account_code, is_default) VALUES
         (NULL, 'united airlines',  '5000', TRUE),
         (NULL, 'delta',            '5000', TRUE),
@@ -62,9 +62,9 @@ def upgrade() -> None:
         (NULL, 'fedex',            '5600', TRUE),
         (NULL, 'google ads',       '5600', TRUE),
         (NULL, 'facebook',         '5600', TRUE);
-    \"\"\")
+    """)
 
 
 def downgrade() -> None:
-    op.execute(\"DELETE FROM vendor_category_mappings WHERE user_id IS NULL;\")
-    op.execute(\"DELETE FROM chart_of_accounts WHERE user_id IS NULL;\")
+    op.execute("DELETE FROM vendor_category_mappings WHERE user_id IS NULL;")
+    op.execute("DELETE FROM chart_of_accounts WHERE user_id IS NULL;")
