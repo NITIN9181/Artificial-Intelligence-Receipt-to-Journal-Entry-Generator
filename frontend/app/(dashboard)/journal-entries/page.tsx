@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { apiClient, ApiError } from '@/lib/api-client'
+import { apiClient, ApiError, getBaseUrl } from '@/lib/api-client'
 import { toast } from 'sonner'
 import { Search, Filter, ChevronDown, ChevronRight, FileText, FileDown, Receipt as ReceiptIcon, MoreVertical } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
@@ -112,8 +112,7 @@ export default function JournalEntriesPage() {
       const supabase = createClient();
       const { data } = await supabase.auth.getSession();
       const token = data.session?.access_token;
-
-      const baseUrl = process.env.NEXT_PUBLIC_FASTAPI_BASE_URL || 'http://localhost:8000';
+      const baseUrl = getBaseUrl();
       const url = new URL(`${baseUrl}/api/v1/journal-entries/export/${format}`);
       if (vendorSearch) url.searchParams.append('vendor', vendorSearch);
 
@@ -144,8 +143,7 @@ export default function JournalEntriesPage() {
       const supabase = createClient();
       const { data } = await supabase.auth.getSession();
       const token = data.session?.access_token;
-
-      const baseUrl = process.env.NEXT_PUBLIC_FASTAPI_BASE_URL || 'http://localhost:8000';
+      const baseUrl = getBaseUrl();
       const url = new URL(`${baseUrl}/api/v1/gnucash/journal-entries/${id}/export?format=${format}`);
 
       const response = await fetch(url.toString(), {

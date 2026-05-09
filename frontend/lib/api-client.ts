@@ -12,14 +12,19 @@ export class ApiError extends Error {
   }
 }
 
-function getBaseUrl(): string {
+export function getBaseUrl(): string {
+  // Prioritize the standard variable we used in deployment
   const envBase =
-    (typeof window === 'undefined'
-      ? process.env.FASTAPI_BASE_URL
-      : process.env.NEXT_PUBLIC_FASTAPI_BASE_URL) ??
-    process.env.NEXT_PUBLIC_FASTAPI_BASE_URL
+    process.env.NEXT_PUBLIC_API_URL ||
+    process.env.NEXT_PUBLIC_FASTAPI_BASE_URL ||
+    process.env.FASTAPI_BASE_URL
 
-  return envBase || 'http://localhost:8000'
+  // If the URL already ends with /api/v1, strip it so the endpoint joining works correctly
+  if (envBase) {
+    return envBase.replace(/\/api\/v1\/?$/, '')
+  }
+
+  return 'http://localhost:8000'
 }
 
 export async function apiClient<T = unknown>(endpoint: string, options: RequestInit = {}): Promise<T> {
