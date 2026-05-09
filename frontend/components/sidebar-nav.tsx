@@ -48,7 +48,6 @@ export function SidebarNav({ userEmail }: { userEmail?: string }) {
           </div>
           <div>
             <h2 className="font-sans text-sm text-white font-medium truncate w-32">{userEmail || "User"}</h2>
-            <span className="font-mono text-[10px] text-tertiary uppercase tracking-widest">Premium Tier</span>
           </div>
         </div>
       </div>
