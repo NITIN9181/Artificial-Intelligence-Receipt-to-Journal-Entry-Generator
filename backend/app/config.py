@@ -43,6 +43,16 @@ class Settings(BaseSettings):
         return [origin.strip() for origin in self.cors_origins.split(",")]
 
     @property
+    def validated_database_url(self) -> str:
+        """Ensures the database URL uses the asyncpg driver."""
+        url = self.database_url
+        if url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+        elif url.startswith("postgresql://") and "+asyncpg" not in url:
+            url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return url
+
+    @property
     def llm_provider(self) -> str:
         if self.ollama_host:
             return "ollama"

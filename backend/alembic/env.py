@@ -74,7 +74,7 @@ async def run_migrations_online() -> None:
     configuration = config.get_section(config.config_ini_section, {})
     if not configuration.get("sqlalchemy.url"):
         from app.config import settings
-        configuration["sqlalchemy.url"] = settings.database_url
+        configuration["sqlalchemy.url"] = settings.validated_database_url
         
     connectable = async_engine_from_config(
         configuration,
