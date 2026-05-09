@@ -15,6 +15,7 @@ from sqlalchemy import (
     String,
     Text,
     text,
+    ForeignKey,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
@@ -109,7 +110,7 @@ class ReviewComment(Base):
     __tablename__ = "review_comments"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    receipt_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    receipt_id = Column(UUID(as_uuid=True), ForeignKey("receipts.id"), nullable=False, index=True)
     reviewer_id = Column(UUID(as_uuid=True), nullable=True, index=True)
     comment = Column(Text, nullable=False)
     action = Column(String(20), nullable=False)  # APPROVED, REJECTED, RETURNED
