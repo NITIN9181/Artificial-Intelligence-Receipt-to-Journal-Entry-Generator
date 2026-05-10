@@ -33,9 +33,14 @@ export default function UploadPage() {
       formData.append('file', fileToUpload, file.name)
       
       const response = await apiClient('/receipts/upload', { method: 'POST', body: formData }) as any
-      await apiClient(`/receipts/${response.id}/extract`, { method: 'POST' })
 
-      toast.success('Receipt uploaded successfully!')
+      // Fire extraction in the background — do NOT await it.
+      // The review page will poll for status updates.
+      apiClient(`/receipts/${response.id}/extract`, { method: 'POST' }).catch((err) => {
+        console.warn('Background extraction failed:', err)
+      })
+
+      toast.success('Receipt uploaded! AI extraction is running...')
       router.push(`/review/${response.id}`)
 
     } catch (err) {
