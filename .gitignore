@@ -19,6 +19,7 @@ GEMINI.md
 
 # Environment
 .venv/
+.agents
 
 # Documentation
 PRD_AI_Receipt_Journal_Entry_Generator_v2.md.pdf

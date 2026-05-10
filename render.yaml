@@ -24,7 +24,7 @@ services:
       - key: NVIDIA_NIM_API_KEY
         sync: false
       - key: LLM_MODEL
-        value: meta/llama-4-maverick-17b-128e-instruct
+        value: microsoft/phi-4-multimodal-instruct
       - key: OLLAMA_HOST
         value: ""
       - key: OLLAMA_MODEL
