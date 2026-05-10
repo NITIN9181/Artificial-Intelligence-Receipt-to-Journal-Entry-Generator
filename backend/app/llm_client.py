@@ -97,9 +97,15 @@ MARKDOWN_FENCE_RE = re.compile(r"```(?:json)?\s*([\s\S]*?)\s*```")
 BACKOFF_DELAYS = [3, 9, 27]
 
 
+# Max base64-encoded payload size for NVIDIA NIM inline images (~180KB encoded ≈ 130KB raw)
+MAX_IMAGE_BYTES = 130_000
+
+
 def encode_image_to_base64(image_bytes: bytes) -> str:
     """
-    Re-encode image to JPEG at 85% quality and return base64 string.
+    Re-encode image to JPEG and return base64 string.
+    Progressively reduces quality and resolution to stay under
+    NVIDIA NIM's inline base64 size limit (~180KB encoded).
     Handles any image format supported by Pillow.
     """
     img = Image.open(io.BytesIO(image_bytes))
@@ -108,10 +114,36 @@ def encode_image_to_base64(image_bytes: bytes) -> str:
     if img.mode in ("RGBA", "LA", "P"):
         img = img.convert("RGB")
 
+    # First try at 85% quality
+    for quality in (85, 70, 50, 35):
+        buffer = io.BytesIO()
+        img.save(buffer, format="JPEG", quality=quality)
+        raw = buffer.getvalue()
+        if len(raw) <= MAX_IMAGE_BYTES:
+            return base64.b64encode(raw).decode("utf-8")
+
+    # Still too large — downscale the image and retry
+    max_dim = 1024
+    while max_dim >= 256:
+        resized = img.copy()
+        resized.thumbnail((max_dim, max_dim), Image.LANCZOS)
+        for quality in (70, 50, 35):
+            buffer = io.BytesIO()
+            resized.save(buffer, format="JPEG", quality=quality)
+            raw = buffer.getvalue()
+            if len(raw) <= MAX_IMAGE_BYTES:
+                logger.info(
+                    f"Image resized to {resized.size} at quality={quality} "
+                    f"({len(raw)} bytes) to fit NIM inline limit"
+                )
+                return base64.b64encode(raw).decode("utf-8")
+        max_dim //= 2
+
+    # Last resort — return whatever we have
     buffer = io.BytesIO()
-    img.save(buffer, format="JPEG", quality=85)
-    buffer.seek(0)
-    return base64.b64encode(buffer.read()).decode("utf-8")
+    img.thumbnail((512, 512), Image.LANCZOS)
+    img.save(buffer, format="JPEG", quality=30)
+    return base64.b64encode(buffer.getvalue()).decode("utf-8")
 
 
 def parse_llm_output(raw_output: str) -> dict:
@@ -230,7 +262,7 @@ class LLMClient:
 
         for attempt in range(len(BACKOFF_DELAYS) + 1):
             try:
-                async with httpx.AsyncClient(timeout=30.0) as client:
+                async with httpx.AsyncClient(timeout=60.0) as client:
                     resp = await client.post(
                         "https://integrate.api.nvidia.com/v1/chat/completions",
                         json=payload,
@@ -259,6 +291,12 @@ class LLMClient:
                             continue
                         resp.raise_for_status()
 
+                    if resp.status_code == 400:
+                        body = resp.text
+                        logger.error(
+                            f"NVIDIA NIM 400 Bad Request. "
+                            f"Model: {self.model}. Response: {body[:500]}"
+                        )
                     resp.raise_for_status()
                     return resp.json()["choices"][0]["message"]["content"]
 

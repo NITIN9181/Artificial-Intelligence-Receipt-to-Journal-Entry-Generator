@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     nvidia_nim_api_key: Optional[str] = None  # NEVER expose
 
     # --- LLM ---
-    llm_model: str = "meta/llama-4-maverick-17b-128e-instruct"
+    llm_model: str = "microsoft/phi-4-multimodal-instruct"
 
     # --- Ollama (local fallback) ---
     ollama_host: Optional[str] = None
