@@ -362,7 +362,7 @@ async def trigger_extraction(
 
     # Mark as EXTRACTING immediately so the UI shows progress
     receipt.status = ReceiptStatus.EXTRACTING
-    await db.flush()
+    await db.commit()  # ✅ Commit the status change so it's visible to other requests
 
     # Run LLM extraction in background with its own DB session
     from app.database import async_session_maker
