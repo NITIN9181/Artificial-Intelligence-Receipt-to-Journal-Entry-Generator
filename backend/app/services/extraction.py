@@ -38,16 +38,17 @@ async def extract_receipt(
       UPLOADED → EXTRACTING → EXTRACTION_FAILED (LLM/parse failure)
       UPLOADED → EXTRACTING → VALIDATION_FAILED (Pydantic failure)
     """
-    # Validate state transition
-    if not validate_status_transition(
-        ReceiptStatus(receipt.status), ReceiptStatus.EXTRACTING
+    # Validate state transition (allow EXTRACTING if already set by the endpoint)
+    current = ReceiptStatus(receipt.status)
+    if current != ReceiptStatus.EXTRACTING and not validate_status_transition(
+        current, ReceiptStatus.EXTRACTING
     ):
         raise ValueError(
             f"Cannot extract receipt in status '{receipt.status}'. "
-            f"Expected 'UPLOADED' or 'EXTRACTION_FAILED'."
+            f"Expected 'UPLOADED', 'EXTRACTION_FAILED', or 'EXTRACTING'."
         )
 
-    # Transition to EXTRACTING
+    # Transition to EXTRACTING (no-op if already set by the endpoint)
     receipt.status = ReceiptStatus.EXTRACTING
     await db.flush()
 

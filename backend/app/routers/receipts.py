@@ -357,12 +357,31 @@ async def trigger_extraction(
             detail=f"Cannot extract receipt in status '{receipt.status}'. Expected 'UPLOADED' or 'EXTRACTION_FAILED'.",
         )
 
-    # Download image and trigger extraction in background
+    # Download image before returning (fast — from Supabase storage)
     image_bytes = await download_receipt_image(receipt.image_url)
 
-    # Run extraction (using background task for async processing)
-    await extract_receipt(db, receipt, image_bytes)
+    # Mark as EXTRACTING immediately so the UI shows progress
+    receipt.status = ReceiptStatus.EXTRACTING
     await db.flush()
+
+    # Run LLM extraction in background with its own DB session
+    from app.database import async_session_maker
+
+    async def run_extraction(r_id: UUID, img_bytes: bytes):
+        async with async_session_maker() as session:
+            r = await session.get(Receipt, r_id)
+            if r:
+                try:
+                    await extract_receipt(session, r, img_bytes)
+                    await session.commit()
+                    logger.info(f"Background extraction completed for receipt {r_id}")
+                except Exception as e:
+                    logger.error(f"Background extraction failed for receipt {r_id}: {e}", exc_info=True)
+                    r.status = ReceiptStatus.EXTRACTION_FAILED
+                    r.extraction_error = f"Extraction error: {type(e).__name__}: {str(e)}"
+                    await session.commit()
+
+    background_tasks.add_task(run_extraction, receipt_id, image_bytes)
 
     return ReceiptExtractResponse(
         id=receipt.id,
