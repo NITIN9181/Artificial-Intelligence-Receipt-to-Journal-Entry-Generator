@@ -1,11 +1,13 @@
 'use client'
 
-import { Mail, ArrowRight, Loader2, CheckCircle2, RefreshCw } from 'lucide-react'
+import { Mail, ArrowRight, Loader2, CheckCircle2, RefreshCw, Lock, Eye, EyeOff } from 'lucide-react'
 import { useState, useEffect } from 'react'
-import { login } from './actions'
+import { login, loginWithPassword } from './actions'
 
 export default function LoginForm({ message, error }: { message?: string; error?: string }) {
   const [isPending, setIsPending] = useState(false)
+  const [usePassword, setUsePassword] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
   useEffect(() => {
     setIsPending(false)
@@ -18,7 +20,7 @@ export default function LoginForm({ message, error }: { message?: string; error?
   const hasSent = !!message;
 
   return (
-    <form className="mt-8 space-y-6 relative z-10 animate-fade-in" action={login} onSubmit={handleSubmit}>
+    <form className="mt-8 space-y-6 relative z-10 animate-fade-in" action={usePassword ? loginWithPassword : login} onSubmit={handleSubmit}>
       
       {hasSent && (
         <div className="bg-success/10 border border-success/30 rounded-2xl p-6 text-center animate-fade-in shadow-inner relative overflow-hidden">
@@ -54,6 +56,35 @@ export default function LoginForm({ message, error }: { message?: string; error?
             />
           </div>
         </div>
+
+        {usePassword && (
+          <div className="animate-fade-in">
+            <label htmlFor="password" className="block font-mono text-xs font-medium text-foreground/80 mb-2 ml-1 tracking-widest uppercase">
+              Password
+            </label>
+            <div className="relative group">
+              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none transition-colors">
+                <Lock className="h-5 w-5 text-foreground/40 group-focus-within:text-primary transition-colors" />
+              </div>
+              <input
+                id="password"
+                name="password"
+                type={showPassword ? "text" : "password"}
+                autoComplete="current-password"
+                required
+                className="appearance-none rounded-xl relative block w-full px-4 py-3 pl-12 pr-12 border border-white/10 bg-white/5 backdrop-blur-sm placeholder-foreground/30 text-white focus:outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary sm:text-sm transition-all hover:border-white/20 font-sans"
+                placeholder="••••••••"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute inset-y-0 right-0 pr-4 flex items-center text-foreground/40 hover:text-foreground/70 transition-colors"
+              >
+                {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {error && (
@@ -73,7 +104,12 @@ export default function LoginForm({ message, error }: { message?: string; error?
             {isPending ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                {hasSent ? "Resending Link..." : "Sending Magic Link..."}
+                {usePassword ? "Signing in..." : hasSent ? "Resending Link..." : "Sending Magic Link..."}
+              </>
+            ) : usePassword ? (
+              <>
+                Sign In
+                <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
               </>
             ) : hasSent ? (
               <>
@@ -87,6 +123,16 @@ export default function LoginForm({ message, error }: { message?: string; error?
               </>
             )}
           </span>
+        </button>
+      </div>
+
+      <div className="text-center">
+        <button
+          type="button"
+          onClick={() => setUsePassword(!usePassword)}
+          className="text-sm text-foreground/60 hover:text-primary transition-colors font-sans"
+        >
+          {usePassword ? "Use magic link instead" : "Sign in with password"}
         </button>
       </div>
     </form>
