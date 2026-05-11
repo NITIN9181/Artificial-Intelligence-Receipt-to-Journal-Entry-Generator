@@ -1,42 +1,64 @@
 'use client'
 
-import { Mail, ArrowRight, Loader2, CheckCircle2, RefreshCw, Lock, Eye, EyeOff } from 'lucide-react'
-import { useState, useEffect } from 'react'
-import { login, loginWithPassword } from './actions'
+import { Mail, ArrowRight, Loader2, Lock, Eye, EyeOff } from 'lucide-react'
+import { useState } from 'react'
+import { loginWithPassword, loginWithGoogle } from './actions'
 
 export default function LoginForm({ message, error }: { message?: string; error?: string }) {
   const [isPending, setIsPending] = useState(false)
-  const [usePassword, setUsePassword] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
 
-  useEffect(() => {
-    setIsPending(false)
-  }, [message, error])
-
-  const handleSubmit = () => {
+  const handlePasswordSubmit = () => {
     setIsPending(true)
   }
 
-  const hasSent = !!message;
+  const handleGoogleLogin = async () => {
+    setIsPending(true)
+    await loginWithGoogle()
+  }
 
   return (
-    <form className="mt-8 space-y-6 relative z-10 animate-fade-in" action={usePassword ? loginWithPassword : login} onSubmit={handleSubmit}>
+    <div className="mt-8 space-y-6 relative z-10 animate-fade-in">
       
-      {hasSent && (
-        <div className="bg-success/10 border border-success/30 rounded-2xl p-6 text-center animate-fade-in shadow-inner relative overflow-hidden">
-          <div className="flex justify-center mb-4">
-            <div className="h-12 w-12 bg-success/20 rounded-full flex items-center justify-center border border-success/40">
-              <CheckCircle2 className="h-6 w-6 text-success" />
-            </div>
-          </div>
-          <h3 className="font-heading text-lg font-bold text-white mb-1">Check your inbox</h3>
-          <p className="font-sans text-sm text-foreground/70 mb-2">
-            We've sent a secure magic link to your email address.
-          </p>
-        </div>
-      )}
+    <div className="mt-8 space-y-6 relative z-10 animate-fade-in">
+      {/* Google Sign In Button */}
+      <button
+        type="button"
+        onClick={handleGoogleLogin}
+        disabled={isPending}
+        className="group relative w-full flex justify-center items-center py-3 px-4 border border-white/20 text-sm font-bold rounded-xl text-white bg-white/5 hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary focus:ring-offset-background transition-all hover:-translate-y-0.5 disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:translate-y-0 overflow-hidden font-heading tracking-wide backdrop-blur-sm"
+      >
+        <span className="relative flex items-center gap-3">
+          {isPending ? (
+            <>
+              <Loader2 className="h-5 w-5 animate-spin" />
+              Signing in...
+            </>
+          ) : (
+            <>
+              <svg className="h-5 w-5" viewBox="0 0 24 24">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+              </svg>
+              Continue with Google
+            </>
+          )}
+        </span>
+      </button>
 
-      <div className="space-y-4">
+      <div className="relative">
+        <div className="absolute inset-0 flex items-center">
+          <div className="w-full border-t border-white/10"></div>
+        </div>
+        <div className="relative flex justify-center text-sm">
+          <span className="px-4 bg-background text-foreground/50 font-sans">Or sign in with email</span>
+        </div>
+      </div>
+
+      {/* Email/Password Form */}
+      <form action={loginWithPassword} onSubmit={handlePasswordSubmit} className="space-y-4">
         <div>
           <label htmlFor="email" className="block font-mono text-xs font-medium text-foreground/80 mb-2 ml-1 tracking-widest uppercase">
             Email address
@@ -57,44 +79,40 @@ export default function LoginForm({ message, error }: { message?: string; error?
           </div>
         </div>
 
-        {usePassword && (
-          <div className="animate-fade-in">
-            <label htmlFor="password" className="block font-mono text-xs font-medium text-foreground/80 mb-2 ml-1 tracking-widest uppercase">
-              Password
-            </label>
-            <div className="relative group">
-              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none transition-colors">
-                <Lock className="h-5 w-5 text-foreground/40 group-focus-within:text-primary transition-colors" />
-              </div>
-              <input
-                id="password"
-                name="password"
-                type={showPassword ? "text" : "password"}
-                autoComplete="current-password"
-                required
-                className="appearance-none rounded-xl relative block w-full px-4 py-3 pl-12 pr-12 border border-white/10 bg-white/5 backdrop-blur-sm placeholder-foreground/30 text-white focus:outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary sm:text-sm transition-all hover:border-white/20 font-sans"
-                placeholder="••••••••"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute inset-y-0 right-0 pr-4 flex items-center text-foreground/40 hover:text-foreground/70 transition-colors"
-              >
-                {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-              </button>
+        <div>
+          <label htmlFor="password" className="block font-mono text-xs font-medium text-foreground/80 mb-2 ml-1 tracking-widest uppercase">
+            Password
+          </label>
+          <div className="relative group">
+            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none transition-colors">
+              <Lock className="h-5 w-5 text-foreground/40 group-focus-within:text-primary transition-colors" />
             </div>
+            <input
+              id="password"
+              name="password"
+              type={showPassword ? "text" : "password"}
+              autoComplete="current-password"
+              required
+              className="appearance-none rounded-xl relative block w-full px-4 py-3 pl-12 pr-12 border border-white/10 bg-white/5 backdrop-blur-sm placeholder-foreground/30 text-white focus:outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary sm:text-sm transition-all hover:border-white/20 font-sans"
+              placeholder="••••••••"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute inset-y-0 right-0 pr-4 flex items-center text-foreground/40 hover:text-foreground/70 transition-colors"
+            >
+              {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+            </button>
+          </div>
+        </div>
+
+        {error && (
+          <div className="text-error bg-error-container/30 border border-error/30 rounded-xl p-4 text-sm flex items-center gap-3 animate-fade-in font-sans">
+            <div className="h-2 w-2 rounded-full bg-error flex-shrink-0 animate-pulse" />
+            {error}
           </div>
         )}
-      </div>
-
-      {error && (
-        <div className="text-error bg-error-container/30 border border-error/30 rounded-xl p-4 text-sm flex items-center gap-3 animate-fade-in font-sans">
-          <div className="h-2 w-2 rounded-full bg-error flex-shrink-0 animate-pulse" />
-          {error}
-        </div>
-      )}
-      
-      <div>
+        
         <button
           type="submit"
           disabled={isPending}
@@ -104,37 +122,18 @@ export default function LoginForm({ message, error }: { message?: string; error?
             {isPending ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                {usePassword ? "Signing in..." : hasSent ? "Resending Link..." : "Sending Magic Link..."}
-              </>
-            ) : usePassword ? (
-              <>
-                Sign In
-                <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
-              </>
-            ) : hasSent ? (
-              <>
-                <RefreshCw className="h-4 w-4" />
-                Retry / Resend Link
+                Signing in...
               </>
             ) : (
               <>
-                Send Magic Link
+                Sign In
                 <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
               </>
             )}
           </span>
         </button>
-      </div>
-
-      <div className="text-center">
-        <button
-          type="button"
-          onClick={() => setUsePassword(!usePassword)}
-          className="text-sm text-foreground/60 hover:text-primary transition-colors font-sans"
-        >
-          {usePassword ? "Use magic link instead" : "Sign in with password"}
-        </button>
-      </div>
+      </form>
+    </div>
     </form>
   )
 }

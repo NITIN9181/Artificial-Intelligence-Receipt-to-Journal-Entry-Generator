@@ -29,7 +29,7 @@ export default async function LoginPage({
             LedgerFlow
           </h2>
           <p className="mt-2 font-sans text-sm text-foreground/70">
-            Sign in with your email to continue. We'll send you a magic link. No passwords required.
+            Sign in with Google or use your email and password
           </p>
         </div>
 
