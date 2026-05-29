@@ -53,24 +53,23 @@ async def lifespan(app: FastAPI):
     logger.info("Database tables ready.")
 
     # Seed the anonymous user so FK constraints are satisfied from the first request
-    from app.models.user import User, UserRole
+    from sqlalchemy import text
     from uuid import UUID
     async with async_session_maker() as seed_session:
         try:
-            anon_id = UUID("00000000-0000-0000-0000-000000000001")
-            existing = await seed_session.get(User, anon_id)
-            if not existing:
-                seed_session.add(User(
-                    id=anon_id,
-                    full_name="Local User",
-                    company_name="My Company",
-                    role=UserRole.ADMIN,
-                ))
-                await seed_session.commit()
-                logger.info("Anonymous user seeded.")
+            await seed_session.execute(
+                text("""
+                    INSERT INTO users (id, full_name, company_name)
+                    VALUES (:id, 'Local User', 'My Company')
+                    ON CONFLICT (id) DO NOTHING
+                """),
+                {"id": "00000000-0000-0000-0000-000000000001"}
+            )
+            await seed_session.commit()
+            logger.info("Anonymous user seeded.")
         except Exception as e:
             await seed_session.rollback()
-            logger.warning(f"Could not seed anonymous user (may already exist): {e}")
+            logger.warning(f"Could not seed anonymous user: {e}")
 
     scheduler.add_job(scheduled_usage_check, 'cron', hour=2, minute=0)
     scheduler.start()
