@@ -19,8 +19,6 @@ export default function LoginForm({ message, error }: { message?: string; error?
 
   return (
     <div className="mt-8 space-y-6 relative z-10 animate-fade-in">
-      
-    <div className="mt-8 space-y-6 relative z-10 animate-fade-in">
       {/* Google Sign In Button */}
       <button
         type="button"
@@ -134,6 +132,5 @@ export default function LoginForm({ message, error }: { message?: string; error?
         </button>
       </form>
     </div>
-    </form>
   )
 }

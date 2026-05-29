@@ -60,8 +60,8 @@ export function Sidebar() {
     queryFn: async () => {
       if (!isReviewer) return 0;
       try {
-        const receipts = await apiClient<any[]>('/receipts/pending-review');
-        return receipts?.length || 0;
+        const data = await apiClient<{ items: unknown[]; total: number }>('/receipts/pending-review');
+        return data?.total || 0;
       } catch {
         return 0;
       }

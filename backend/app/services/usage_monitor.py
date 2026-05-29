@@ -31,19 +31,25 @@ async def query_storage_usage(supabase_admin_client: Client) -> float:
         logger.error(f"Failed to query storage usage: {e}")
         return 0.0
 
-async def query_daily_request_count(supabase_admin_client: Client) -> int:
-    # Approximating this from the audit_logs table since edge functions logs aren't exposed
+async def query_daily_request_count(db: AsyncSession) -> int:
+    """Query daily request count from audit_logs table."""
+    from sqlalchemy import text
+    from datetime import datetime, timedelta
+    yesterday = datetime.utcnow() - timedelta(days=1)
     try:
-        # We can't actually do this async easily with synchronous supabase client.
-        # But we will return a dummy value or a rough estimate.
-        return 0
+        result = await db.execute(
+            text("SELECT COUNT(*) FROM audit_logs WHERE performed_at >= :yesterday"),
+            {"yesterday": yesterday}
+        )
+        return int(result.scalar() or 0)
     except Exception as e:
+        logger.warning(f"Could not query audit_logs for daily request count: {e}")
         return 0
 
 async def run_usage_check(db: AsyncSession, supabase_admin_client: Client):
     postgres_mb = await query_postgres_size(db)
     storage_mb = await query_storage_usage(supabase_admin_client)
-    request_count = await query_daily_request_count(supabase_admin_client)
+    request_count = await query_daily_request_count(db)
 
     threshold_hit = (
         postgres_mb > 400 or

@@ -123,7 +123,7 @@ async def get_current_user_id(
     from sqlalchemy import text
     try:
         await db.execute(
-            text("INSERT INTO users (id, full_name, company_name) VALUES (:id, 'Test User', 'Test Corp') ON CONFLICT (id) DO NOTHING"),
+            text("INSERT INTO users (id) VALUES (:id) ON CONFLICT (id) DO NOTHING"),
             {"id": user_id}
         )
         await db.commit()

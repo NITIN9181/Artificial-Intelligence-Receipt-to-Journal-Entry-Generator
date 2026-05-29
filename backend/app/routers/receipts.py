@@ -65,7 +65,7 @@ async def upload_receipt(
         )
 
     # Check daily limit
-    today_start = datetime.combine(date.today(), datetime.min.time())
+    today_start = datetime.combine(date.today(), datetime.min.time()).replace(tzinfo=timezone.utc)
     count_query = select(func.count()).where(
         Receipt.user_id == user_id,
         Receipt.created_at >= today_start,
@@ -143,7 +143,7 @@ async def bulk_upload_receipts(
         file_data_list.append((file, file_bytes))
 
     # Check daily limit
-    today_start = datetime.combine(date.today(), datetime.min.time())
+    today_start = datetime.combine(date.today(), datetime.min.time()).replace(tzinfo=timezone.utc)
     count_query = select(func.count()).where(
         Receipt.user_id == user_id,
         Receipt.created_at >= today_start,
@@ -507,13 +507,6 @@ async def journalize_receipt(
         )
 
     # Check if already journalized
-    from sqlalchemy import exists
-    already_exists = await db.execute(
-        select(exists().where(
-            __import__("app.models.journal", fromlist=["JournalEntry"]).JournalEntry.receipt_id == receipt_id
-        ))
-    )
-    # Simpler approach:
     from app.models.journal import JournalEntry
     existing = await db.execute(
         select(JournalEntry).where(JournalEntry.receipt_id == receipt_id)

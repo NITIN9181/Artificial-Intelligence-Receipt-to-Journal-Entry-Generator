@@ -261,12 +261,6 @@ async def create_journal_entry(
             ),
         )
 
-    # Additional sanity check
-    assert total_debit == total_credit, (
-        f"CRITICAL: Bookkeeping assertion failed! "
-        f"Debits ({total_debit}) ≠ Credits ({total_credit})"
-    )
-
     # --- Step 5: Generate entry number ---
     entry_number = await generate_entry_number(db)
 
