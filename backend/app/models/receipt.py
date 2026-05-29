@@ -5,6 +5,7 @@ Uses dialect-agnostic types for SQLite + PostgreSQL compatibility.
 
 import enum
 import json
+import os
 from datetime import datetime
 from uuid import uuid4
 
@@ -17,42 +18,60 @@ from sqlalchemy import (
     Text,
     TypeDecorator,
     ForeignKey,
-    func,
 )
 from sqlalchemy.orm import relationship
 
 from app.database import Base
 
+_IS_SQLITE = os.environ.get("DATABASE_URL", "").startswith("sqlite")
+
 
 # ---------------------------------------------------------------------------
-# Compatibility types
+# Compatibility types — use native Postgres types on Postgres, TEXT on SQLite
 # ---------------------------------------------------------------------------
 
 class GUID(TypeDecorator):
-    """UUID stored as TEXT in SQLite, native UUID in Postgres."""
+    """UUID: native UUID on Postgres, TEXT on SQLite."""
     impl = Text
     cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == "postgresql":
+            from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+            return dialect.type_descriptor(PG_UUID(as_uuid=True))
+        return dialect.type_descriptor(Text())
 
     def process_bind_param(self, value, dialect):
         if value is None:
             return None
+        if dialect.name == "postgresql":
+            import uuid
+            return uuid.UUID(str(value)) if not isinstance(value, uuid.UUID) else value
         return str(value)
 
     def process_result_value(self, value, dialect):
         if value is None:
             return None
         import uuid
-        return uuid.UUID(str(value))
+        return uuid.UUID(str(value)) if not isinstance(value, uuid.UUID) else value
 
 
 class JSONType(TypeDecorator):
-    """JSON stored as TEXT in SQLite, native JSONB in Postgres."""
+    """JSON: native JSONB on Postgres, TEXT on SQLite."""
     impl = Text
     cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == "postgresql":
+            from sqlalchemy.dialects.postgresql import JSONB
+            return dialect.type_descriptor(JSONB())
+        return dialect.type_descriptor(Text())
 
     def process_bind_param(self, value, dialect):
         if value is None:
             return None
+        if dialect.name == "postgresql":
+            return value  # JSONB handles serialization natively
         return json.dumps(value)
 
     def process_result_value(self, value, dialect):
@@ -117,7 +136,7 @@ class Receipt(Base):
     mime_type = Column(Text)
     file_size_bytes = Column(Integer)
     status = Column(
-        Enum(ReceiptStatus, name="receipt_status", create_type=False),
+        Enum(ReceiptStatus, name="receipt_status", create_type=_IS_SQLITE is False),
         nullable=False,
         default=ReceiptStatus.UPLOADED,
     )

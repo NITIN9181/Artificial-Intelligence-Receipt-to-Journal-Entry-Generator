@@ -4,6 +4,7 @@ Uses dialect-agnostic types for SQLite + PostgreSQL compatibility.
 """
 
 import enum
+import os
 from datetime import datetime
 from uuid import uuid4
 
@@ -22,6 +23,8 @@ from sqlalchemy.orm import relationship
 
 from app.database import Base
 from app.models.receipt import GUID
+
+_IS_SQLITE = os.environ.get("DATABASE_URL", "").startswith("sqlite")
 
 
 class EntryStatus(str, enum.Enum):
@@ -43,7 +46,7 @@ class JournalEntry(Base):
     total_debit = Column(Numeric(15, 2), nullable=False)
     total_credit = Column(Numeric(15, 2), nullable=False)
     status = Column(
-        Enum(EntryStatus, name="entry_status", create_type=False),
+        Enum(EntryStatus, name="entry_status", create_type=_IS_SQLITE is False),
         nullable=False,
         default=EntryStatus.DRAFT,
     )

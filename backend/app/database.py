@@ -1,5 +1,6 @@
 """
-Async SQLAlchemy engine and session factory for Supabase Postgres.
+Async SQLAlchemy engine and session factory.
+Supports both PostgreSQL (via asyncpg) and SQLite (via aiosqlite).
 """
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -7,13 +8,23 @@ from sqlalchemy.orm import DeclarativeBase
 
 from app.config import settings
 
+_is_sqlite = settings.database_url.startswith("sqlite")
+_is_postgres = not _is_sqlite
+
 engine_kwargs: dict = {
     "echo": False,
     "pool_pre_ping": True,
 }
-if not settings.database_url.startswith("sqlite"):
+
+if _is_postgres:
     engine_kwargs["pool_size"] = 5
     engine_kwargs["max_overflow"] = 10
+    # Disable prepared statement cache — required when using PgBouncer
+    # in transaction/statement pooling mode (Supabase, Render, Railway, etc.)
+    engine_kwargs["connect_args"] = {
+        "statement_cache_size": 0,
+        "prepared_statement_cache_size": 0,
+    }
 else:
     # SQLite requires check_same_thread=False for async use
     engine_kwargs["connect_args"] = {"check_same_thread": False}
