@@ -27,27 +27,8 @@ export async function updateSession(request: NextRequest) {
     }
   )
 
-  // Refreshing the auth token
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  const path = request.nextUrl.pathname
-
-  // Protect all routes except /login, /auth, /api, and Next.js internals
-  const isPublicRoute = path.startsWith('/login') || path.startsWith('/auth') || path.startsWith('/api') || path.includes('/_next')
-
-  if (!user && !isPublicRoute) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/login'
-    return NextResponse.redirect(url)
-  }
-
-  if (user && path.startsWith('/login')) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/'
-    return NextResponse.redirect(url)
-  }
+  // Refresh the auth token if present (keeps session alive), but never redirect
+  await supabase.auth.getUser()
 
   return supabaseResponse
 }
