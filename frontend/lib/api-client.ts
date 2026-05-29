@@ -1,5 +1,3 @@
-import { createClient } from '@/utils/supabase/client'
-
 export class ApiError extends Error {
   status: number
   body: unknown
@@ -29,13 +27,7 @@ export function getBaseUrl(): string {
 
 export async function apiClient<T = unknown>(endpoint: string, options: RequestInit = {}): Promise<T> {
   try {
-    const supabase = createClient()
-    const { data } = await supabase.auth.getSession()
-
     const headers = new Headers(options.headers)
-    if (data.session?.access_token) {
-      headers.set('Authorization', `Bearer ${data.session.access_token}`)
-    }
 
     if (!headers.has('Content-Type') && !(options.body instanceof FormData)) {
       headers.set('Content-Type', 'application/json')
