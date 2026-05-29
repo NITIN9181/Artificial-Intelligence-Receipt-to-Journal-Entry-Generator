@@ -86,9 +86,24 @@ Output schema:
   }
 }"""
 
-USER_PROMPT = """Extract all financial data from the attached receipt image according to the \
-schema in your instructions. If this is a handwritten receipt or the image \
-quality is poor, set confidence scores accordingly."""
+USER_PROMPT = """Look at this receipt image and extract all financial data.
+
+IMPORTANT: Your response must be ONLY a valid JSON object. No explanations, no markdown, no text before or after the JSON. Start your response with { and end with }.
+
+Use this exact schema:
+{
+  "vendor_name": "string or null",
+  "date": "YYYY-MM-DD or null",
+  "currency": "USD",
+  "subtotal": 0.00,
+  "tax_amount": 0.00,
+  "tip_amount": null,
+  "total_amount": 0.00,
+  "payment_method": "Cash or Card or Check or Split or null",
+  "line_items": [{"description": "string", "quantity": 1, "unit_price": 0.00, "line_total": 0.00}],
+  "expense_category": "string or null",
+  "confidence_scores": {"vendor_name": 0.9, "date": 0.9, "total_amount": 0.9, "subtotal": 0.8, "tax_amount": 0.8, "line_items": 0.8}
+}"""
 
 # Regex to strip markdown code fences from LLM output
 MARKDOWN_FENCE_RE = re.compile(r"```(?:json)?\s*([\s\S]*?)\s*```")
@@ -148,13 +163,17 @@ def encode_image_to_base64(image_bytes: bytes) -> str:
 
 def parse_llm_output(raw_output: str) -> dict:
     """
-    Parse raw LLM output to JSON dict using the PRD §13 pipeline:
+    Parse raw LLM output to JSON dict:
     1. Strip whitespace
     2. Strip markdown code fences
     3. json.loads()
-    4. On fail: json_repair.repair() → retry json.loads()
-    5. On second fail: raise ExtractionParseError
+    4. Find first {...} block in the text (handles prose-wrapped JSON)
+    5. json_repair → retry json.loads()
+    6. Raise ExtractionParseError
     """
+    # Log a preview for debugging
+    logger.info(f"Raw LLM output (first 500 chars): {raw_output[:500]}")
+
     # Step 1: Strip whitespace
     text = raw_output.strip()
 
@@ -163,20 +182,33 @@ def parse_llm_output(raw_output: str) -> dict:
     if fence_match:
         text = fence_match.group(1).strip()
 
-    # Step 3: Try json.loads()
+    # Step 3: Try json.loads() on the full text
     try:
         return json.loads(text)
     except json.JSONDecodeError:
         pass
 
-    # Step 4: Try json_repair
+    # Step 4: Find the first { ... } block in the text (model may wrap JSON in prose)
+    brace_match = re.search(r'\{[\s\S]*\}', text)
+    if brace_match:
+        candidate = brace_match.group(0)
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            text = candidate  # use this as input for json_repair
+
+    # Step 5: Try json_repair
     try:
         repaired = json_repair.repair_json(text, return_objects=False)
-        return json.loads(repaired)
+        result = json.loads(repaired)
+        # json_repair on garbage text returns {} or "" — reject empty results
+        if result and isinstance(result, dict):
+            return result
     except (json.JSONDecodeError, Exception):
         pass
 
-    # Step 5: Raise error
+    # Step 6: Raise error
+    logger.warning(f"Could not parse LLM output. Full output: {raw_output[:500]}")
     raise ExtractionParseError(
         raw_output=raw_output,
         message=f"Failed to parse LLM output after json_repair. Raw length: {len(raw_output)}",
