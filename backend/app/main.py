@@ -5,10 +5,12 @@ CORS, startup, error handling, router registration.
 
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
 from app.routers import health, journal_entries, receipts, admin, gnucash
@@ -38,10 +40,21 @@ async def lifespan(app: FastAPI):
     logger.info(f"Starting AI Receipt Journal Entry Generator")
     logger.info(f"LLM Provider: {settings.llm_provider}")
     logger.info(f"Database configured: {'yes' if settings.database_url else 'no'}")
-    
+
+    # Auto-create all tables (works for SQLite and Postgres)
+    from app.database import engine, Base
+    import app.models.receipt   # noqa: F401
+    import app.models.journal   # noqa: F401
+    import app.models.user      # noqa: F401
+    import app.models.usage     # noqa: F401
+    import app.models.gnucash   # noqa: F401
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    logger.info("Database tables ready.")
+
     scheduler.add_job(scheduled_usage_check, 'cron', hour=2, minute=0)
     scheduler.start()
-    
+
     yield
     logger.info("Shutting down...")
     scheduler.shutdown()
@@ -62,6 +75,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# --- Static file serving for local uploads ---
+UPLOAD_DIR = Path(__file__).resolve().parent.parent / "uploads"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
 # --- Routers ---
 app.include_router(health.router)

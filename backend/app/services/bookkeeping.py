@@ -66,33 +66,33 @@ async def lookup_vendor_account(
 ) -> tuple[str, str]:
     """
     Look up vendor in vendor_category_mappings (case-insensitive substring match).
-    User-specific mappings take precedence over system defaults.
-    Falls back to 5999 Miscellaneous Expense.
+    Falls back to 5999 Miscellaneous Expense when the table doesn't exist or no match found.
     """
-    from sqlalchemy import or_, text as sql_text
+    from sqlalchemy import text as sql_text
 
-    # Query for matching vendor patterns — user-specific first, then system defaults
-    query = sql_text("""
-        SELECT vcm.account_code, coa.name
-        FROM vendor_category_mappings vcm
-        JOIN chart_of_accounts coa ON coa.code = vcm.account_code
-            AND (coa.user_id = :user_id OR coa.user_id IS NULL)
-        WHERE LOWER(:vendor) LIKE '%%' || LOWER(vcm.vendor_name_pattern) || '%%'
-            AND (vcm.user_id = :user_id OR vcm.user_id IS NULL)
-        ORDER BY
-            CASE WHEN vcm.user_id IS NOT NULL THEN 0 ELSE 1 END,
-            LENGTH(vcm.vendor_name_pattern) DESC
-        LIMIT 1
-    """)
+    try:
+        query = sql_text("""
+            SELECT vcm.account_code, coa.name
+            FROM vendor_category_mappings vcm
+            JOIN chart_of_accounts coa ON coa.code = vcm.account_code
+                AND (coa.user_id = :user_id OR coa.user_id IS NULL)
+            WHERE LOWER(:vendor) LIKE '%' || LOWER(vcm.vendor_name_pattern) || '%'
+                AND (vcm.user_id = :user_id OR vcm.user_id IS NULL)
+            ORDER BY
+                CASE WHEN vcm.user_id IS NOT NULL THEN 0 ELSE 1 END,
+                LENGTH(vcm.vendor_name_pattern) DESC
+            LIMIT 1
+        """)
 
-    result = await db.execute(
-        query,
-        {"vendor": vendor_name.lower(), "user_id": str(user_id)},
-    )
-    row = result.first()
-
-    if row:
-        return (row[0], row[1])
+        result = await db.execute(
+            query,
+            {"vendor": vendor_name.lower(), "user_id": str(user_id)},
+        )
+        row = result.first()
+        if row:
+            return (row[0], row[1])
+    except Exception:
+        pass  # Table doesn't exist (SQLite) or other error — use fallback
 
     return (FALLBACK_EXPENSE_CODE, FALLBACK_EXPENSE_NAME)
 

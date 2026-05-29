@@ -1,9 +1,10 @@
 """
 SQLAlchemy ORM model for receipts table.
-Maps to the schema defined in PRD §6.
+Uses dialect-agnostic types for SQLite + PostgreSQL compatibility.
 """
 
 import enum
+import json
 from datetime import datetime
 from uuid import uuid4
 
@@ -14,14 +15,57 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
-    text,
+    TypeDecorator,
     ForeignKey,
+    func,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
 from app.database import Base
 
+
+# ---------------------------------------------------------------------------
+# Compatibility types
+# ---------------------------------------------------------------------------
+
+class GUID(TypeDecorator):
+    """UUID stored as TEXT in SQLite, native UUID in Postgres."""
+    impl = Text
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        return str(value)
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        import uuid
+        return uuid.UUID(str(value))
+
+
+class JSONType(TypeDecorator):
+    """JSON stored as TEXT in SQLite, native JSONB in Postgres."""
+    impl = Text
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        return json.dumps(value)
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        if isinstance(value, (dict, list)):
+            return value
+        return json.loads(value)
+
+
+# ---------------------------------------------------------------------------
+# Enums & state machine
+# ---------------------------------------------------------------------------
 
 class ReceiptStatus(str, enum.Enum):
     UPLOADED = "UPLOADED"
@@ -30,53 +74,44 @@ class ReceiptStatus(str, enum.Enum):
     EXTRACTION_FAILED = "EXTRACTION_FAILED"
     VALIDATION_FAILED = "VALIDATION_FAILED"
     REVIEWED = "REVIEWED"
-    PENDING_REVIEW = "PENDING_REVIEW"  # Phase 3: Awaiting reviewer approval
+    PENDING_REVIEW = "PENDING_REVIEW"
     POSTED = "POSTED"
     REJECTED = "REJECTED"
-    QUARANTINED = "QUARANTINED"  # Unbalanced entries that failed bookkeeping assertion
+    QUARANTINED = "QUARANTINED"
 
 
-# Valid state transitions per PRD §FR-5 + Phase 3 approval workflow
 VALID_TRANSITIONS: dict[ReceiptStatus, set[ReceiptStatus]] = {
     ReceiptStatus.UPLOADED: {ReceiptStatus.EXTRACTING},
-    ReceiptStatus.EXTRACTING: {
-        ReceiptStatus.EXTRACTED,
-        ReceiptStatus.EXTRACTION_FAILED,
-    },
-    ReceiptStatus.EXTRACTED: {
-        ReceiptStatus.REVIEWED,
-        ReceiptStatus.VALIDATION_FAILED,
-    },
-    ReceiptStatus.EXTRACTION_FAILED: {ReceiptStatus.EXTRACTING},  # retry
-    ReceiptStatus.VALIDATION_FAILED: {ReceiptStatus.REVIEWED},     # manual fix
+    ReceiptStatus.EXTRACTING: {ReceiptStatus.EXTRACTED, ReceiptStatus.EXTRACTION_FAILED},
+    ReceiptStatus.EXTRACTED: {ReceiptStatus.REVIEWED, ReceiptStatus.VALIDATION_FAILED},
+    ReceiptStatus.EXTRACTION_FAILED: {ReceiptStatus.EXTRACTING},
+    ReceiptStatus.VALIDATION_FAILED: {ReceiptStatus.REVIEWED},
     ReceiptStatus.REVIEWED: {
-        ReceiptStatus.PENDING_REVIEW,  # Phase 3: Preparer submits for approval
+        ReceiptStatus.PENDING_REVIEW,
         ReceiptStatus.POSTED,
         ReceiptStatus.REJECTED,
-        ReceiptStatus.QUARANTINED,  # Can transition to QUARANTINED if bookkeeping fails
+        ReceiptStatus.QUARANTINED,
     },
-    ReceiptStatus.PENDING_REVIEW: {
-        ReceiptStatus.REVIEWED,  # Reviewer approves or returns for edits
-        ReceiptStatus.REJECTED,  # Reviewer rejects
-    },
-    ReceiptStatus.POSTED: set(),       # terminal — immutable
-    ReceiptStatus.REJECTED: set(),     # terminal
-    ReceiptStatus.QUARANTINED: set(),  # terminal — requires admin intervention
+    ReceiptStatus.PENDING_REVIEW: {ReceiptStatus.REVIEWED, ReceiptStatus.REJECTED},
+    ReceiptStatus.POSTED: set(),
+    ReceiptStatus.REJECTED: set(),
+    ReceiptStatus.QUARANTINED: set(),
 }
 
 
-def validate_status_transition(
-    current: ReceiptStatus, target: ReceiptStatus
-) -> bool:
-    """Check if a status transition is valid per the PRD state machine."""
+def validate_status_transition(current: ReceiptStatus, target: ReceiptStatus) -> bool:
     return target in VALID_TRANSITIONS.get(current, set())
 
+
+# ---------------------------------------------------------------------------
+# Models
+# ---------------------------------------------------------------------------
 
 class Receipt(Base):
     __tablename__ = "receipts"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    user_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    id = Column(GUID, primary_key=True, default=uuid4)
+    user_id = Column(GUID, nullable=False, index=True)
     image_url = Column(Text, nullable=False)
     original_filename = Column(Text)
     mime_type = Column(Text)
@@ -86,37 +121,28 @@ class Receipt(Base):
         nullable=False,
         default=ReceiptStatus.UPLOADED,
     )
-    extracted_data = Column(JSONB)
-    confidence_scores = Column(JSONB)
+    extracted_data = Column(JSONType)
+    confidence_scores = Column(JSONType)
     raw_llm_output = Column(Text)
     extraction_error = Column(Text)
     extracted_at = Column(DateTime(timezone=True))
     reviewed_at = Column(DateTime(timezone=True))
-    batch_id = Column(UUID(as_uuid=True), nullable=True, index=True)
-    created_at = Column(
-        DateTime(timezone=True), nullable=False, server_default=text("NOW()")
-    )
-    updated_at = Column(
-        DateTime(timezone=True), nullable=False, server_default=text("NOW()")
-    )
+    batch_id = Column(GUID, nullable=True, index=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    # Relationships
     journal_entries = relationship("JournalEntry", back_populates="receipt")
     review_comments = relationship("ReviewComment", back_populates="receipt", cascade="all, delete-orphan")
 
 
 class ReviewComment(Base):
-    """Review comments for approval workflow (Phase 3)."""
     __tablename__ = "review_comments"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    receipt_id = Column(UUID(as_uuid=True), ForeignKey("receipts.id"), nullable=False, index=True)
-    reviewer_id = Column(UUID(as_uuid=True), nullable=True, index=True)
+    id = Column(GUID, primary_key=True, default=uuid4)
+    receipt_id = Column(GUID, ForeignKey("receipts.id"), nullable=False, index=True)
+    reviewer_id = Column(GUID, nullable=True, index=True)
     comment = Column(Text, nullable=False)
-    action = Column(String(20), nullable=False)  # APPROVED, REJECTED, RETURNED
-    created_at = Column(
-        DateTime(timezone=True), nullable=False, server_default=text("NOW()")
-    )
+    action = Column(String(20), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
 
-    # Relationships
     receipt = relationship("Receipt", back_populates="review_comments")

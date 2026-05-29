@@ -42,6 +42,26 @@ ALLOWED_MIME_TYPES = {
 MAX_FILE_SIZE = settings.max_upload_size_mb * 1024 * 1024
 
 
+async def _audit_log(db: AsyncSession, record_id: str, old_values: dict, new_values: dict, performed_by: str):
+    """Write an audit log entry — silently skipped if the table doesn't exist (SQLite)."""
+    from sqlalchemy import text
+    try:
+        await db.execute(
+            text("""
+                INSERT INTO audit_logs (table_name, record_id, action, old_values, new_values, performed_by)
+                VALUES ('receipts', :record_id, 'UPDATE', :old_values, :new_values, :performed_by)
+            """),
+            {
+                "record_id": record_id,
+                "old_values": str(old_values),
+                "new_values": str(new_values),
+                "performed_by": performed_by,
+            }
+        )
+    except Exception:
+        pass  # audit_logs table may not exist in SQLite
+
+
 @router.post("/upload", response_model=ReceiptUploadResponse, status_code=201)
 async def upload_receipt(
     file: UploadFile = File(...),
@@ -544,28 +564,9 @@ async def journalize_receipt(
         # Set receipt status to QUARANTINED
         old_status = receipt.status.value if isinstance(receipt.status, ReceiptStatus) else receipt.status
         receipt.status = ReceiptStatus.QUARANTINED
-        
-        # Write to audit_logs table
-        from sqlalchemy import text
-        audit_query = text("""
-            INSERT INTO audit_logs (table_name, record_id, action, old_values, new_values, performed_by)
-            VALUES ('receipts', :record_id, 'UPDATE', :old_values, :new_values, :performed_by)
-        """)
-        
-        await db.execute(
-            audit_query,
-            {
-                "record_id": str(receipt_id),
-                "old_values": {"status": old_status},
-                "new_values": {
-                    "status": "QUARANTINED",
-                    "error": f"Bookkeeping assertion failed: debits ({e.total_debit}) != credits ({e.total_credit})",
-                    "details": e.details
-                },
-                "performed_by": user_id,
-            }
-        )
-        
+
+        await _audit_log(db, str(receipt_id), {"status": old_status},
+                         {"status": "QUARANTINED", "error": str(e)}, user_id)
         await db.commit()
         
         # Return HTTP 422 with detailed error
@@ -615,23 +616,8 @@ async def submit_for_review(
     # Update status
     old_status = receipt.status.value if isinstance(receipt.status, ReceiptStatus) else receipt.status
     receipt.status = ReceiptStatus.PENDING_REVIEW
-    
-    # Audit log
-    from sqlalchemy import text
-    audit_query = text("""
-        INSERT INTO audit_logs (table_name, record_id, action, old_values, new_values, performed_by)
-        VALUES ('receipts', :record_id, 'UPDATE', :old_values, :new_values, :performed_by)
-    """)
-    await db.execute(
-        audit_query,
-        {
-            "record_id": str(receipt_id),
-            "old_values": {"status": old_status},
-            "new_values": {"status": "PENDING_REVIEW"},
-            "performed_by": str(user.id),
-        }
-    )
-    
+
+    await _audit_log(db, str(receipt_id), {"status": old_status}, {"status": "PENDING_REVIEW"}, str(user.id))
     await db.commit()
     
     # Return response
@@ -680,7 +666,7 @@ async def approve_receipt(
     # Update status
     old_status = receipt.status.value if isinstance(receipt.status, ReceiptStatus) else receipt.status
     receipt.status = ReceiptStatus.REVIEWED
-    
+
     # Add review comment
     comment = ReviewComment(
         receipt_id=receipt.id,
@@ -689,23 +675,8 @@ async def approve_receipt(
         action="APPROVED"
     )
     db.add(comment)
-    
-    # Audit log
-    from sqlalchemy import text
-    audit_query = text("""
-        INSERT INTO audit_logs (table_name, record_id, action, old_values, new_values, performed_by)
-        VALUES ('receipts', :record_id, 'UPDATE', :old_values, :new_values, :performed_by)
-    """)
-    await db.execute(
-        audit_query,
-        {
-            "record_id": str(receipt_id),
-            "old_values": {"status": old_status},
-            "new_values": {"status": "REVIEWED", "action": "APPROVED"},
-            "performed_by": str(user.id),
-        }
-    )
-    
+
+    await _audit_log(db, str(receipt_id), {"status": old_status}, {"status": "REVIEWED", "action": "APPROVED"}, str(user.id))
     await db.commit()
     
     # Return response
@@ -755,7 +726,7 @@ async def reject_receipt(
     # Update status
     old_status = receipt.status.value if isinstance(receipt.status, ReceiptStatus) else receipt.status
     receipt.status = ReceiptStatus.REJECTED
-    
+
     # Add review comment
     comment = ReviewComment(
         receipt_id=receipt.id,
@@ -764,23 +735,8 @@ async def reject_receipt(
         action="REJECTED"
     )
     db.add(comment)
-    
-    # Audit log
-    from sqlalchemy import text
-    audit_query = text("""
-        INSERT INTO audit_logs (table_name, record_id, action, old_values, new_values, performed_by)
-        VALUES ('receipts', :record_id, 'UPDATE', :old_values, :new_values, :performed_by)
-    """)
-    await db.execute(
-        audit_query,
-        {
-            "record_id": str(receipt_id),
-            "old_values": {"status": old_status},
-            "new_values": {"status": "REJECTED", "comment": data.comment, "action": "REJECTED"},
-            "performed_by": str(user.id),
-        }
-    )
-    
+
+    await _audit_log(db, str(receipt_id), {"status": old_status}, {"status": "REJECTED", "comment": data.comment}, str(user.id))
     await db.commit()
     
     # Return response

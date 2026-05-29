@@ -7,13 +7,16 @@ from sqlalchemy.orm import DeclarativeBase
 
 from app.config import settings
 
-engine_kwargs = {
+engine_kwargs: dict = {
     "echo": False,
     "pool_pre_ping": True,
 }
 if not settings.database_url.startswith("sqlite"):
     engine_kwargs["pool_size"] = 5
     engine_kwargs["max_overflow"] = 10
+else:
+    # SQLite requires check_same_thread=False for async use
+    engine_kwargs["connect_args"] = {"check_same_thread": False}
 
 engine = create_async_engine(settings.validated_database_url, **engine_kwargs)
 

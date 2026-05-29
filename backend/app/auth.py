@@ -38,12 +38,19 @@ async def get_current_user_id(
 ) -> str:
     """Returns the fixed anonymous user ID and ensures the user row exists in the DB."""
     from sqlalchemy import text
+    from app.models.user import User, UserRole
+    import uuid
     try:
-        await db.execute(
-            text("INSERT INTO users (id) VALUES (:id) ON CONFLICT (id) DO NOTHING"),
-            {"id": ANONYMOUS_USER_ID}
-        )
-        await db.commit()
+        existing = await db.get(User, uuid.UUID(ANONYMOUS_USER_ID))
+        if not existing:
+            user = User(
+                id=uuid.UUID(ANONYMOUS_USER_ID),
+                full_name="Local User",
+                company_name="My Company",
+                role=UserRole.ADMIN,
+            )
+            db.add(user)
+            await db.commit()
     except Exception:
         await db.rollback()
     return ANONYMOUS_USER_ID
