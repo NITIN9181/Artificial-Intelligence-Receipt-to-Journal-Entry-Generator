@@ -42,7 +42,7 @@ async def lifespan(app: FastAPI):
     logger.info(f"Database configured: {'yes' if settings.database_url else 'no'}")
 
     # Auto-create all tables (works for SQLite and Postgres)
-    from app.database import engine, Base
+    from app.database import engine, Base, async_session_maker
     import app.models.receipt   # noqa: F401
     import app.models.journal   # noqa: F401
     import app.models.user      # noqa: F401
@@ -51,6 +51,26 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     logger.info("Database tables ready.")
+
+    # Seed the anonymous user so FK constraints are satisfied from the first request
+    from app.models.user import User, UserRole
+    from uuid import UUID
+    async with async_session_maker() as seed_session:
+        try:
+            anon_id = UUID("00000000-0000-0000-0000-000000000001")
+            existing = await seed_session.get(User, anon_id)
+            if not existing:
+                seed_session.add(User(
+                    id=anon_id,
+                    full_name="Local User",
+                    company_name="My Company",
+                    role=UserRole.ADMIN,
+                ))
+                await seed_session.commit()
+                logger.info("Anonymous user seeded.")
+        except Exception as e:
+            await seed_session.rollback()
+            logger.warning(f"Could not seed anonymous user (may already exist): {e}")
 
     scheduler.add_job(scheduled_usage_check, 'cron', hour=2, minute=0)
     scheduler.start()

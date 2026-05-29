@@ -37,22 +37,27 @@ async def get_current_user_id(
     db: AsyncSession = Depends(get_db),
 ) -> str:
     """Returns the fixed anonymous user ID and ensures the user row exists in the DB."""
-    from sqlalchemy import text
     from app.models.user import User, UserRole
+    from app.database import async_session_maker
     import uuid
-    try:
-        existing = await db.get(User, uuid.UUID(ANONYMOUS_USER_ID))
-        if not existing:
-            user = User(
-                id=uuid.UUID(ANONYMOUS_USER_ID),
-                full_name="Local User",
-                company_name="My Company",
-                role=UserRole.ADMIN,
-            )
-            db.add(user)
-            await db.commit()
-    except Exception:
-        await db.rollback()
+
+    # Use a separate session with its own transaction so the user row
+    # is committed before the caller's session tries to insert receipts.
+    async with async_session_maker() as setup_session:
+        try:
+            existing = await setup_session.get(User, uuid.UUID(ANONYMOUS_USER_ID))
+            if not existing:
+                user = User(
+                    id=uuid.UUID(ANONYMOUS_USER_ID),
+                    full_name="Local User",
+                    company_name="My Company",
+                    role=UserRole.ADMIN,
+                )
+                setup_session.add(user)
+                await setup_session.commit()
+        except Exception:
+            await setup_session.rollback()
+
     return ANONYMOUS_USER_ID
 
 
