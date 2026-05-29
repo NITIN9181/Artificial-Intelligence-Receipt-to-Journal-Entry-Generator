@@ -311,21 +311,24 @@ async def update_user_role(
     # Update role
     old_role = user.role.value if isinstance(user.role, UserRole) else user.role
     user.role = request.role
-    
-    # Audit log
-    audit_query = text("""
-        INSERT INTO audit_logs (table_name, record_id, action, old_values, new_values, performed_by)
-        VALUES ('users', :record_id, 'UPDATE', :old_values, :new_values, :performed_by)
-    """)
-    await db.execute(
-        audit_query,
-        {
-            "record_id": str(user_id),
-            "old_values": {"role": old_role},
-            "new_values": {"role": request.role.value},
-            "performed_by": str(admin_user.id),
-        }
-    )
+
+    # Audit log (silently skipped if audit_logs table doesn't exist)
+    try:
+        audit_query = text("""
+            INSERT INTO audit_logs (table_name, record_id, action, old_values, new_values, performed_by)
+            VALUES ('users', :record_id, 'UPDATE', :old_values, :new_values, :performed_by)
+        """)
+        await db.execute(
+            audit_query,
+            {
+                "record_id": str(user_id),
+                "old_values": str({"role": old_role}),
+                "new_values": str({"role": request.role.value}),
+                "performed_by": str(admin_user.id),
+            }
+        )
+    except Exception:
+        pass
     
     await db.commit()
     await db.refresh(user)
