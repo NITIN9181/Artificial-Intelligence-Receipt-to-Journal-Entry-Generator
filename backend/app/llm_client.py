@@ -238,10 +238,8 @@ class LLMClient:
     async def _call_nvidia(self, image_bytes: bytes) -> str:
         """Call NVIDIA NIM API with exponential backoff on 429."""
         b64 = encode_image_to_base64(image_bytes)
-        # Use the simplified string with <img> tag for Phi-4 Multimodal
-        # This is more compatible with current NIM vision implementations
-        content_string = f"{USER_PROMPT}\n<img src=\"data:image/jpeg;base64,{b64}\" />"
-        
+
+        # Standard OpenAI vision format — works with llama-3.2-vision and other NIM VLMs
         payload = {
             "model": self.model,
             "temperature": 0.0,
@@ -249,7 +247,21 @@ class LLMClient:
             "top_p": 1.0,
             "messages": [
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": content_string},
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": USER_PROMPT,
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{b64}",
+                            },
+                        },
+                    ],
+                },
             ],
         }
 
