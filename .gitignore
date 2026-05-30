@@ -51,3 +51,5 @@ playwright-report/
 test-results/
 .pytest_cache/
 qa_test_report.md
+ARCHITECTURE.md
+INTERVIEW_STORIES.md
